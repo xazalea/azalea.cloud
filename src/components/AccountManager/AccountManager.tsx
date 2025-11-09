@@ -14,6 +14,7 @@ export const AccountManager: React.FC = () => {
 
   useEffect(() => {
     loadAccounts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadAccounts = async () => {

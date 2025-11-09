@@ -141,6 +141,7 @@ export const Terminal: React.FC<TerminalProps> = ({ onCommand, initialOutput }) 
       window.removeEventListener('resize', handleResize);
       xterm.dispose();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme, handleCommand]);
 
   return (

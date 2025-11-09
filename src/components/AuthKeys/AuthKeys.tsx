@@ -13,6 +13,7 @@ export const AuthKeys: React.FC = () => {
     loadKeys();
     const unsubscribe = authKeyService.subscribeToAuthKeys(setKeys);
     return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadKeys = async () => {

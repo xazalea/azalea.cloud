@@ -19,7 +19,7 @@ export interface GapiAuthResponse {
 declare global {
   interface Window {
     gapi?: {
-      load: (features: string, callback: () => void) => void;
+      load: (features: string, options?: { callback?: () => void } | (() => void)) => void;
       auth2?: {
         init: (config: any) => Promise<any>;
         getAuthInstance: () => any;
@@ -50,9 +50,11 @@ export function loadGapi(): Promise<void> {
     script.onload = () => {
       window.gapi_onload = () => resolve();
       if (window.gapi) {
-        window.gapi.load('', {
+        // gapi.load can accept either a callback function or an options object
+        const loadOptions: { callback?: () => void } = {
           callback: window.gapi_onload,
-        });
+        };
+        window.gapi.load('', loadOptions);
       } else {
         resolve();
       }

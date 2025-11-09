@@ -12,14 +12,14 @@ import { startWorker } from './services/workerService';
 function AppContent() {
   const [activeTab, setActiveTab] = useState('terminal');
   const [tokenManager, setTokenManager] = useState<TokenRefreshManager | null>(null);
-  const authKeyService = new AuthKeyService();
+  const authKeyServiceRef = React.useRef(new AuthKeyService());
 
   useEffect(() => {
     // Initialize token refresh manager
     const manager = new TokenRefreshManager(async (token) => {
       // Save token to database when updated
       try {
-        await authKeyService.saveAuthKey(token);
+        await authKeyServiceRef.current.saveAuthKey(token);
         console.log('Token saved to database');
       } catch (error) {
         console.error('Failed to save token:', error);
