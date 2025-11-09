@@ -7,8 +7,10 @@ import { Terminal } from './components/Terminal/Terminal';
 import { AuthKeys } from './components/AuthKeys/AuthKeys';
 import { AccountManager } from './components/AccountManager/AccountManager';
 import { ProviderSelector } from './components/ProviderSelector/ProviderSelector';
+import { ProviderSpecs } from './components/ProviderSpecs/ProviderSpecs';
 import { WebVMLocal } from './components/WebVM/WebVMLocal';
 import { WebVMSSHX } from './components/WebVM/WebVMSSHX';
+import { SuperProvider } from './components/SuperProvider/SuperProvider';
 import { TokenRefreshManager } from '../lib/auth/metadataAuth';
 import { AuthKeyService } from '../lib/auth/authKeyService';
 import { startWorker } from './services/workerService';
@@ -78,6 +80,8 @@ function AppContent() {
           return <WebVMSSHX />;
         case 'azalea-local':
           return <WebVMLocal />;
+        case 'azalea-super':
+          return <SuperProvider />;
         default:
           return <Terminal />;
       }
@@ -123,7 +127,12 @@ function AppContent() {
             gap: '16px',
           }}
         >
-          {activeTab === 'terminal' && <ProviderSelector />}
+          {activeTab === 'terminal' && (
+            <>
+              <ProviderSelector />
+              <ProviderSpecs />
+            </>
+          )}
           <div style={{ flex: 1, minHeight: 0 }}>
             {renderContent()}
           </div>
