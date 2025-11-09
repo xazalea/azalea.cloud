@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { Terminal as XTerm } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
-import { WebLinksAddon } from 'xterm-addon-web-links';
-import 'xterm/css/xterm.css';
+import { Terminal as XTerm } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import '@xterm/xterm/css/xterm.css';
 import { useTheme } from '../../theme/theme';
 import { CloudShellService } from '../../services/cloudShellService';
 
@@ -59,7 +59,6 @@ export const Terminal: React.FC<TerminalProps> = ({ onCommand, initialOutput }) 
         background: theme.surface,
         foreground: theme.text,
         cursor: theme.accent,
-        selection: theme.surfaceVariant,
         black: theme.midnight || '#424658',
         red: theme.error,
         green: theme.success,

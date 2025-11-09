@@ -40,7 +40,9 @@ export const WebVMLocal: React.FC = () => {
         iframe.title = 'AzaleaLocal - WebVM';
         iframe.onload = () => setLoading(false);
 
-        containerRef.current.appendChild(iframe);
+        if (containerRef.current) {
+          containerRef.current.appendChild(iframe);
+        }
 
         return () => {
           if (containerRef.current && iframe.parentNode) {

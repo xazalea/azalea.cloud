@@ -21,6 +21,10 @@ export const colors = {
     accentLight: '#D9A69F',
     error: '#C56B62',
     success: '#6C739C',
+    midnight: '#424658',
+    peach: '#DEA785',
+    lavender: '#D9A69F',
+    sapphire: '#6C739C',
   },
   
   // Dark mode
@@ -35,6 +39,10 @@ export const colors = {
     accentLight: '#D9A69F',
     error: '#C56B62',
     success: '#6C739C',
+    midnight: '#424658',
+    peach: '#DEA785',
+    lavender: '#D9A69F',
+    sapphire: '#6C739C',
   },
 } as const;
 

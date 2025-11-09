@@ -4,7 +4,7 @@ import { colors, ColorMode } from './colors';
 interface ThemeContextType {
   mode: ColorMode;
   toggleMode: () => void;
-  theme: typeof colors.light;
+  theme: typeof colors.light | typeof colors.dark;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
