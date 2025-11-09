@@ -50,3 +50,19 @@ azaleacompute-*.json
 # Build outputs
 build/
 out/
+
+# Next.js (from remote - keeping for compatibility)
+/.next/
+/.pnp
+.pnp.js
+*.tsbuildinfo
+next-env.d.ts
+
+# Vercel
+.vercel
+
+# Testing
+/coverage
+
+# Misc
+*.pem

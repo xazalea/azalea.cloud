@@ -16,6 +16,8 @@ A free cloud computing service with a beautiful, modern interface built with Typ
 - 📁 File management (coming soon)
 - ⚙️ Settings panel (coming soon)
 
+> **Note**: This repository contains the Vite/React implementation with cloud shell capabilities. For the Next.js/VNC desktop version, see the `nextjs-vnc` branch or check the documentation files in the repository.
+
 ## Getting Started
 
 ### Prerequisites
@@ -109,7 +111,39 @@ AzaleaCloud provides unlimited access through automated service account manageme
 
 See [ACCOUNT_MANAGEMENT.md](./ACCOUNT_MANAGEMENT.md) for detailed documentation.
 
+## Git Workflow
+
+This repository is connected to: **https://github.com/xazalea/azalea.cloud**
+
+### Quick Commands
+
+```bash
+# Pull latest changes
+npm run git-pull
+
+# Push changes
+npm run git-push
+
+# Or use git directly
+git pull origin main
+git push origin main
+```
+
+See [GIT_SETUP.md](./GIT_SETUP.md) for detailed git workflow.
+
+## Related Documentation
+
+The repository also includes documentation for alternative implementations:
+- [GOOGLE_PROXY_GUIDE.md](./GOOGLE_PROXY_GUIDE.md) - Google Proxy integration guide
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - Deployment instructions
+- [QUICKSTART.md](./QUICKSTART.md) - Quick start guide
+
 ## License
 
 MIT
 
+---
+
+Built with ❤️ using Vite, React, and TypeScript
+
+**AzaleaCloud** - Free Cloud Computing, Accessible to Everyone.
