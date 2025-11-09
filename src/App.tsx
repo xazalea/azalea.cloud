@@ -104,11 +104,18 @@ function AppContent() {
       switch (currentProvider) {
         case 'azalea-cloud':
           return (
-            <Terminal 
-              onCommand={undefined}
-              onDesktopClick={handleStartDesktop}
-              showDesktopButton={true}
-            />
+            <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <Terminal 
+                  onCommand={undefined}
+                  onDesktopClick={handleStartDesktop}
+                  showDesktopButton={true}
+                />
+              </div>
+              <div style={{ height: '200px', minHeight: '200px' }}>
+                <WebVMWithBackend />
+              </div>
+            </div>
           );
         case 'azalea-sshx':
           return <WebVMSSHX />;
