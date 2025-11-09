@@ -299,12 +299,12 @@ export default function EscapePage() {
               Open browser console (F12) and try these commands:
             </p>
             <div className="bg-black/50 p-4 rounded font-mono text-sm space-y-2">
-              <div className="text-green-400">// Try to escape iframe</div>
+              <div className="text-green-400">{'// Try to escape iframe'}</div>
               <div className="text-white">window.top.location.href = window.location.href;</div>
-              <div className="text-green-400 mt-4">// Open localhost</div>
-              <div className="text-white">window.open('http://localhost:3000', '_blank');</div>
-              <div className="text-green-400 mt-4">// Access file system</div>
-              <div className="text-white">window.location.href = 'file:///C:/';</div>
+              <div className="text-green-400 mt-4">{'// Open localhost'}</div>
+              <div className="text-white">window.open(&apos;http://localhost:3000&apos;, &apos;_blank&apos;);</div>
+              <div className="text-green-400 mt-4">{'// Access file system'}</div>
+              <div className="text-white">window.location.href = &apos;file:///C:/&apos;;</div>
             </div>
           </CardBody>
         </Card>
@@ -315,13 +315,13 @@ export default function EscapePage() {
             <h2 className="text-xl font-semibold text-white mb-4">System Information</h2>
             <div className="bg-black/50 p-4 rounded text-sm space-y-1 font-mono">
               <div className="text-gray-300">
-                <span className="text-purple-400">User Agent:</span> {navigator.userAgent}
+                <span className="text-purple-400">User Agent:</span> {typeof navigator !== 'undefined' ? navigator.userAgent : 'Loading...'}
               </div>
               <div className="text-gray-300">
-                <span className="text-purple-400">Platform:</span> {navigator.platform}
+                <span className="text-purple-400">Platform:</span> {typeof navigator !== 'undefined' ? navigator.platform : 'Loading...'}
               </div>
               <div className="text-gray-300">
-                <span className="text-purple-400">Location:</span> {window.location.href}
+                <span className="text-purple-400">Location:</span> {typeof window !== 'undefined' ? window.location.href : 'Loading...'}
               </div>
               <div className="text-gray-300">
                 <span className="text-purple-400">In Iframe:</span> {inIframe ? 'Yes' : 'No'}

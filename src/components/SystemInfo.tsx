@@ -152,7 +152,7 @@ export function SystemInfo({ windowId }: SystemInfoProps) {
                 <div>
                   <div className="font-semibold">Running in iframe</div>
                   <div className="text-sm text-yellow-300 mt-1">
-                    Use the Terminal "escape" command to try breaking out of iframe restrictions.
+                    Use the Terminal &quot;escape&quot; command to try breaking out of iframe restrictions.
                   </div>
                 </div>
               </div>

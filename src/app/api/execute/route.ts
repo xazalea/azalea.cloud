@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     // Note: This executes on the AzaleaCloud server, not the Windows device
     const { exec } = require('child_process');
     
-    return new Promise((resolve) => {
+    return new Promise<NextResponse>((resolve) => {
       exec(command, { timeout: 10000 }, (error: any, stdout: string, stderr: string) => {
         if (error) {
           resolve(NextResponse.json({

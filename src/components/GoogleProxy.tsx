@@ -33,9 +33,9 @@ export function GoogleProxy() {
   };
 
   const quickLinks = [
-    { name: 'Escape Page', url: `${window.location.origin}/escape` },
-    { name: 'Desktop', url: `${window.location.origin}/desktop` },
-    { name: 'Terminal', url: `${window.location.origin}/terminal` },
+    { name: 'Escape Page', url: typeof window !== 'undefined' ? `${window.location.origin}/escape` : '/escape' },
+    { name: 'Desktop', url: typeof window !== 'undefined' ? `${window.location.origin}/desktop` : '/desktop' },
+    { name: 'Terminal', url: typeof window !== 'undefined' ? `${window.location.origin}/terminal` : '/terminal' },
   ];
 
   return (
@@ -44,7 +44,7 @@ export function GoogleProxy() {
         <CardBody className="p-6">
           <h2 className="text-2xl font-bold text-white mb-4">Google Proxy Integration</h2>
           <p className="text-gray-300 mb-6">
-            Generate Google Translate proxy URLs to access pages through Google's Windows device.
+            Generate Google Translate proxy URLs to access pages through Google&apos;s Windows device.
             This allows you to escape single-page restrictions and access the full desktop.
           </p>
 
@@ -143,9 +143,9 @@ export function GoogleProxy() {
           <ol className="list-decimal list-inside space-y-2 text-sm text-yellow-300">
             <li>Enter a URL or use a quick link above</li>
             <li>Generate the Google proxy URL</li>
-            <li>Open the proxy URL - it loads through Google's Windows device</li>
+            <li>Open the proxy URL - it loads through Google&apos;s Windows device</li>
             <li>Use the escape tools on that page to break out of single-page restriction</li>
-            <li>Access the full Windows 10 desktop on Google's device</li>
+            <li>Access the full Windows 10 desktop on Google&apos;s device</li>
           </ol>
         </CardBody>
       </Card>
