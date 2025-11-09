@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTheme } from '../../theme/theme';
 import { Terminal as XTerm } from '@xterm/xterm';
-import { FitAddon } from '@xterm-addon-fit';
-import { WebLinksAddon } from '@xterm-addon-web-links';
+import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import { BackendInitializer } from '../../services/backendInitializer';
 
