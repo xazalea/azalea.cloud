@@ -1,0 +1,12 @@
+# AzaleaCloud Cron Jobs
+# Add these to your crontab using: crontab -e
+
+# Generate service account keys daily at midnight
+0 0 * * * cd /path/to/azalea-cloud && bash scripts/generate_keys.sh >> logs/key_generation.log 2>&1
+
+# Update instance metadata every 6 hours
+0 */6 * * * cd /path/to/azalea-cloud && bash scripts/set_metadata.sh azalea-cloud-instance us-central1-a $(cat .token) >> logs/metadata_update.log 2>&1
+
+# Or use the schedule script to set up automatically:
+# bash scripts/schedule_jobs.sh
+
