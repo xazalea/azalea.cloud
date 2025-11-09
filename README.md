@@ -32,14 +32,20 @@ A free cloud computing service with a beautiful, modern interface built with Typ
 
 ```bash
 # Clone the repository
-git clone https://github.com/xazalea/azalea.cloud.git
+git clone --recursive https://github.com/xazalea/azalea.cloud.git
 cd azalea-cloud
 
-# Initialize and update submodules (includes WebVM)
+# Or if already cloned, initialize submodules
 git submodule update --init --recursive
 
 # Install dependencies
 npm install
+
+# Build WebVM submodule (required for backend)
+npm run build:webvm
+
+# Or build everything
+npm run build:all
 ```
 
 ### Development

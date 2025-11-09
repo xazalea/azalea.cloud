@@ -113,8 +113,10 @@ function AppContent() {
                   showDesktopButton={true}
                 />
               </div>
-              <div style={{ height: '200px', minHeight: '200px' }}>
-                <WebVMWithBackend />
+              <div style={{ height: '300px', minHeight: '300px', display: 'flex', gap: '8px' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <WebVMWithBackend />
+                </div>
               </div>
             </div>
           );

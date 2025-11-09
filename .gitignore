@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# WebVM build
+webvm/build
+webvm/node_modules
+public/webvm
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
