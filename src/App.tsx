@@ -10,6 +10,7 @@ import { ProviderSelector } from './components/ProviderSelector/ProviderSelector
 import { ProviderSpecs } from './components/ProviderSpecs/ProviderSpecs';
 import { WebVMLocal } from './components/WebVM/WebVMLocal';
 import { WebVMSSHX } from './components/WebVM/WebVMSSHX';
+import { WebVMWithBackend } from './components/WebVM/WebVMWithBackend';
 import { SuperProvider } from './components/SuperProvider/SuperProvider';
 import { UltraProvider } from './components/UltraProvider/UltraProvider';
 import { DesktopViewer } from './components/DesktopViewer/DesktopViewer';
