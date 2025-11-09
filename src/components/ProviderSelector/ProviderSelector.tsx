@@ -21,8 +21,30 @@ export const ProviderSelector: React.FC = () => {
         border: `1px solid ${theme.border}`,
       }}
     >
-      <div style={{ marginBottom: '12px', fontSize: '14px', fontWeight: 600, color: theme.text }}>
-        Select Provider
+      <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: '14px', fontWeight: 600, color: theme.text }}>
+          Select Provider
+        </div>
+        {currentProvider === 'azalea-super' && (
+          <div
+            style={{
+              fontSize: '11px',
+              padding: '4px 8px',
+              backgroundColor: theme.accent + '20',
+              color: theme.accent,
+              borderRadius: '4px',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            <span className="material-icons" style={{ fontSize: '14px' }}>
+              bolt
+            </span>
+            SUPER MODE
+          </div>
+        )}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {Object.values(providers).map((provider) => {

@@ -142,6 +142,7 @@ export const SuperProvider: React.FC = () => {
           gap: '8px',
           padding: '8px',
           overflow: 'hidden',
+          position: 'relative',
         }}
       >
         {/* Instance 1 */}
@@ -180,10 +181,13 @@ export const SuperProvider: React.FC = () => {
               height: '100%',
               minHeight: 0,
               position: 'relative',
+              overflow: 'hidden',
             }}
           >
             {instancesReady[0] ? (
-              <Terminal />
+              <div style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}>
+                <Terminal />
+              </div>
             ) : (
               <div
                 style={{
@@ -238,10 +242,13 @@ export const SuperProvider: React.FC = () => {
               height: '100%',
               minHeight: 0,
               position: 'relative',
+              overflow: 'hidden',
             }}
           >
             {instancesReady[1] ? (
-              <Terminal />
+              <div style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}>
+                <Terminal />
+              </div>
             ) : (
               <div
                 style={{
