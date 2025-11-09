@@ -105,20 +105,11 @@ function AppContent() {
       switch (currentProvider) {
         case 'azalea-cloud':
           return (
-            <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ flex: 1, minHeight: 0 }}>
-                <Terminal 
-                  onCommand={undefined}
-                  onDesktopClick={handleStartDesktop}
-                  showDesktopButton={true}
-                />
-              </div>
-              <div style={{ height: '300px', minHeight: '300px', display: 'flex', gap: '8px' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <WebVMWithBackend />
-                </div>
-              </div>
-            </div>
+            <Terminal 
+              onCommand={undefined}
+              onDesktopClick={handleStartDesktop}
+              showDesktopButton={true}
+            />
           );
         case 'azalea-sshx':
           return <WebVMSSHX />;
@@ -180,17 +171,9 @@ function AppContent() {
               <div style={{ padding: '0 16px' }}>
                 <ProviderSpecs />
               </div>
-              {currentProvider === 'azalea-cloud' && (
-                <div style={{ padding: '0 16px 8px 16px', fontSize: '12px', color: '#6C739C' }}>
-                  <span className="material-icons" style={{ fontSize: '14px', verticalAlign: 'middle', marginRight: '4px' }}>
-                    info
-                  </span>
-                  Backend server runs automatically in WebVM for Docker operations
-                </div>
-              )}
             </>
           )}
-          <div style={{ flex: 1, minHeight: 0, padding: activeTab === 'terminal' ? '16px' : '0', display: 'flex' }}>
+          <div style={{ flex: 1, minHeight: 0, padding: activeTab === 'terminal' ? '16px' : '0', display: 'flex', overflow: 'hidden' }}>
             {renderContent()}
           </div>
         </main>
