@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -9,16 +9,24 @@ import { CloudShellService } from '../../services/cloudShellService';
 interface TerminalProps {
   onCommand?: (command: string) => void;
   initialOutput?: string;
+  instanceId?: string;
+  compact?: boolean;
 }
 
-export const Terminal: React.FC<TerminalProps> = ({ onCommand, initialOutput }) => {
+export const Terminal: React.FC<TerminalProps> = ({ 
+  onCommand, 
+  initialOutput,
+  instanceId,
+  compact = false,
+}) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const { theme } = useTheme();
   const cloudShellService = useRef(new CloudShellService());
+  const currentLineRef = useRef('');
 
-  const handleCommand = React.useCallback(async (command: string) => {
+  const handleCommand = useCallback(async (command: string) => {
     const parts = command.split(' ');
     const cmd = parts[0].toLowerCase();
 
@@ -53,8 +61,10 @@ export const Terminal: React.FC<TerminalProps> = ({ onCommand, initialOutput }) 
     // Initialize xterm
     const xterm = new XTerm({
       cursorBlink: true,
-      fontSize: 14,
-      fontFamily: '"Fira Code", "Courier New", monospace',
+      fontSize: compact ? 12 : 14,
+      fontFamily: '"Roboto Mono", "Courier New", monospace',
+      lineHeight: 1.2,
+      letterSpacing: 0,
       theme: {
         background: theme.surface,
         foreground: theme.text,
@@ -96,52 +106,73 @@ export const Terminal: React.FC<TerminalProps> = ({ onCommand, initialOutput }) 
     }
 
     // Welcome message
+    const prompt = instanceId 
+      ? `\x1b[1;32mazalea@cloud-${instanceId}\x1b[0m:\x1b[1;34m~\x1b[0m$ `
+      : `\x1b[1;32mazalea@cloud\x1b[0m:\x1b[1;34m~\x1b[0m$ `;
+    
     xterm.writeln('\x1b[1;36mWelcome to AzaleaCloud Terminal\x1b[0m');
     xterm.writeln('Type \x1b[1;33mhelp\x1b[0m for available commands.\r\n');
 
     // Command handling
-    let currentLine = '';
     xterm.onData((data) => {
-      if (data === '\r') {
+      if (data === '\r' || data === '\n') {
         // Enter pressed
         xterm.write('\r\n');
-        if (currentLine.trim()) {
-          handleCommand(currentLine.trim());
+        if (currentLineRef.current.trim()) {
+          handleCommand(currentLineRef.current.trim());
         }
-        currentLine = '';
-        xterm.write('\x1b[1;32mazalea@cloud\x1b[0m:\x1b[1;34m~\x1b[0m$ ');
+        currentLineRef.current = '';
+        xterm.write(prompt);
       } else if (data === '\x7f' || data === '\b') {
         // Backspace
-        if (currentLine.length > 0) {
-          currentLine = currentLine.slice(0, -1);
+        if (currentLineRef.current.length > 0) {
+          currentLineRef.current = currentLineRef.current.slice(0, -1);
           xterm.write('\b \b');
         }
       } else if (data === '\x03') {
         // Ctrl+C
         xterm.write('^C\r\n');
-        currentLine = '';
-        xterm.write('\x1b[1;32mazalea@cloud\x1b[0m:\x1b[1;34m~\x1b[0m$ ');
-      } else {
-        currentLine += data;
+        currentLineRef.current = '';
+        xterm.write(prompt);
+      } else if (data === '\x04') {
+        // Ctrl+D (EOF)
+        xterm.write('^D\r\n');
+        currentLineRef.current = '';
+        xterm.write(prompt);
+      } else if (data.charCodeAt(0) >= 32) {
+        // Printable characters
+        currentLineRef.current += data;
         xterm.write(data);
       }
     });
 
     // Initial prompt
-    xterm.write('\x1b[1;32mazalea@cloud\x1b[0m:\x1b[1;34m~\x1b[0m$ ');
+    xterm.write(prompt);
 
     // Handle resize
     const handleResize = () => {
-      fitAddon.fit();
+      if (fitAddonRef.current) {
+        fitAddonRef.current.fit();
+      }
     };
+    
+    // Use ResizeObserver for better resize handling
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+    });
+    
+    if (terminalRef.current) {
+      resizeObserver.observe(terminalRef.current);
+    }
+    
     window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       xterm.dispose();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [theme, handleCommand]);
+  }, [theme, handleCommand, instanceId, compact, initialOutput]);
 
   return (
     <div
@@ -150,38 +181,41 @@ export const Terminal: React.FC<TerminalProps> = ({ onCommand, initialOutput }) 
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
+        backgroundColor: theme.surface,
+        borderRadius: compact ? '4px' : '8px',
+        overflow: 'hidden',
       }}
     >
-      <div
-        style={{
-          padding: '8px 16px',
-          backgroundColor: theme.surfaceVariant,
-          borderBottom: `1px solid ${theme.border}`,
-          borderRadius: '8px 8px 0 0',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          fontSize: '12px',
-          color: theme.textSecondary,
-        }}
-      >
-        <span className="material-icons" style={{ fontSize: '16px' }}>
-          cloud
-        </span>
-        <span>AzaleaCloud Terminal</span>
-      </div>
+      {!compact && (
+        <div
+          style={{
+            padding: '8px 16px',
+            backgroundColor: theme.surfaceVariant,
+            borderBottom: `1px solid ${theme.border}`,
+            borderRadius: '8px 8px 0 0',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontSize: '12px',
+            color: theme.textSecondary,
+          }}
+        >
+          <span className="material-icons" style={{ fontSize: '16px' }}>
+            terminal
+          </span>
+          <span>AzaleaCloud Terminal</span>
+        </div>
+      )}
       <div
         ref={terminalRef}
         style={{
           flex: 1,
           width: '100%',
           height: '100%',
-          padding: '16px',
-          backgroundColor: theme.surface,
-          borderRadius: '0 0 8px 8px',
+          padding: compact ? '8px' : '16px',
+          overflow: 'hidden',
         }}
       />
     </div>
   );
 };
-

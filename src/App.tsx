@@ -116,27 +116,30 @@ function AppContent() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#F0DAD5' }}>
       <Header />
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
         <main
           style={{
             flex: 1,
-            overflow: 'auto',
+            overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
-            padding: '16px',
-            gap: '16px',
+            backgroundColor: '#F0DAD5',
           }}
         >
           {activeTab === 'terminal' && (
             <>
-              <ProviderSelector />
-              <ProviderSpecs />
+              <div style={{ padding: '16px 16px 0 16px' }}>
+                <ProviderSelector />
+              </div>
+              <div style={{ padding: '0 16px' }}>
+                <ProviderSpecs />
+              </div>
             </>
           )}
-          <div style={{ flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 0, padding: activeTab === 'terminal' ? '16px' : '0', display: 'flex' }}>
             {renderContent()}
           </div>
         </main>

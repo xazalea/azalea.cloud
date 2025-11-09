@@ -185,9 +185,7 @@ export const SuperProvider: React.FC = () => {
             }}
           >
             {instancesReady[0] ? (
-              <div style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}>
-                <Terminal />
-              </div>
+              <Terminal instanceId="1" compact={true} />
             ) : (
               <div
                 style={{
@@ -246,9 +244,7 @@ export const SuperProvider: React.FC = () => {
             }}
           >
             {instancesReady[1] ? (
-              <div style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}>
-                <Terminal />
-              </div>
+              <Terminal instanceId="2" compact={true} />
             ) : (
               <div
                 style={{
