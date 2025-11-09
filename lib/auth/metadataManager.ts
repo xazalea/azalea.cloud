@@ -21,8 +21,8 @@ export interface MetadataEntry {
 }
 
 export class MetadataManager {
-  private auth: GoogleAuth;
-  private compute: Compute;
+  private auth: GoogleAuth | null = null;
+  private compute: Compute | null = null;
   private projectId: string;
 
   constructor() {
@@ -64,6 +64,10 @@ export class MetadataManager {
     metadataKey: string,
     metadataValue: string
   ): Promise<void> {
+    if (!this.compute) {
+      throw new Error('Compute client not available (server-side only)');
+    }
+    
     try {
       const zoneObj = this.compute.zone(zone);
       const instance = zoneObj.instance(instanceName);
@@ -124,6 +128,10 @@ export class MetadataManager {
     instanceName: string,
     zone: string
   ): Promise<Record<string, string>> {
+    if (!this.compute) {
+      throw new Error('Compute client not available (server-side only)');
+    }
+    
     try {
       const zoneObj = this.compute.zone(zone);
       const instance = zoneObj.instance(instanceName);

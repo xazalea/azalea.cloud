@@ -32,8 +32,8 @@ export interface ServiceAccountKey {
 }
 
 export class ServiceAccountManager {
-  private auth: GoogleAuth;
-  private iamClient: IAM;
+  private auth: GoogleAuth | null = null;
+  private iamClient: IAM | null = null;
   private projectId: string;
   private serviceAccountEmail: string;
 
@@ -76,6 +76,10 @@ export class ServiceAccountManager {
     displayName: string,
     userId: string
   ): Promise<ServiceAccount> {
+    if (!this.iamClient) {
+      throw new Error('IAM client not available (server-side only)');
+    }
+    
     try {
       const accountId = `azalea-user-${userId}-${Date.now()}`.toLowerCase();
       
@@ -132,6 +136,10 @@ export class ServiceAccountManager {
   async generateServiceAccountKey(
     serviceAccountEmail: string
   ): Promise<ServiceAccountKey> {
+    if (!this.iamClient) {
+      throw new Error('IAM client not available (server-side only)');
+    }
+    
     try {
       const name = `projects/${this.projectId}/serviceAccounts/${serviceAccountEmail}`;
       
@@ -194,6 +202,10 @@ export class ServiceAccountManager {
     serviceAccountEmail: string,
     userId: string
   ): Promise<void> {
+    if (!this.iamClient) {
+      throw new Error('IAM client not available (server-side only)');
+    }
+    
     try {
       const name = `projects/${this.projectId}/serviceAccounts/${serviceAccountEmail}`;
       await this.iamClient.projects.serviceAccounts.delete({ name });
