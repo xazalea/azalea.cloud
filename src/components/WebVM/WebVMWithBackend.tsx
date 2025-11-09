@@ -76,7 +76,9 @@ export const WebVMWithBackend: React.FC = () => {
       };
       
       iframeRef.current = iframe;
-      containerRef.current.appendChild(iframe);
+      if (containerRef.current) {
+        containerRef.current.appendChild(iframe);
+      }
     };
     
     testAndLoad();
