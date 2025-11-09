@@ -3,8 +3,11 @@
  * Handles creation and management of service accounts for unlimited user access
  */
 
-import { GoogleAuth } from 'google-auth-library';
-import { IAM } from '@google-cloud/iam';
+// Server-side only imports - these packages are not needed for frontend build
+// @ts-ignore - Optional server-side dependency
+import type { GoogleAuth } from 'google-auth-library';
+// @ts-ignore - Optional server-side dependency
+import type { IAM } from '@google-cloud/iam';
 import { ref, set, push, get, onValue, off, DatabaseReference } from 'firebase/database';
 import { database } from '../../src/config/firebase';
 
@@ -39,19 +42,31 @@ export class ServiceAccountManager {
     this.projectId = 'azaleacompute';
     this.serviceAccountEmail = 'azalea@azaleacompute.iam.gserviceaccount.com';
     
-    // Initialize Google Auth with service account
-    this.auth = new GoogleAuth({
-      keyFile: './azaleacompute-fe11c72f4aa9.json',
-      scopes: [
-        'https://www.googleapis.com/auth/cloud-platform',
-        'https://www.googleapis.com/auth/iam',
-      ],
-    });
+    // Server-side only: Initialize Google Auth with service account
+    // These will only work in a Node.js environment, not in the browser
+    if (typeof window === 'undefined') {
+      try {
+        // @ts-ignore - Dynamic import for server-side only
+        const { GoogleAuth } = require('google-auth-library');
+        // @ts-ignore - Dynamic import for server-side only
+        const { IAM } = require('@google-cloud/iam');
+        
+        this.auth = new GoogleAuth({
+          keyFile: './azaleacompute-fe11c72f4aa9.json',
+          scopes: [
+            'https://www.googleapis.com/auth/cloud-platform',
+            'https://www.googleapis.com/auth/iam',
+          ],
+        });
 
-    this.iamClient = new IAM({
-      auth: this.auth,
-      projectId: this.projectId,
-    });
+        this.iamClient = new IAM({
+          auth: this.auth,
+          projectId: this.projectId,
+        });
+      } catch (error) {
+        console.warn('Google Cloud IAM libraries not available (server-side only)');
+      }
+    }
   }
 
   /**

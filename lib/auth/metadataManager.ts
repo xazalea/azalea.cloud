@@ -3,8 +3,11 @@
  * Manages custom metadata entries for long-lived access tokens
  */
 
-import { GoogleAuth } from 'google-auth-library';
-import { Compute } from '@google-cloud/compute';
+// Server-side only imports - these packages are not needed for frontend build
+// @ts-ignore - Optional server-side dependency
+import type { GoogleAuth } from 'google-auth-library';
+// @ts-ignore - Optional server-side dependency
+import type { Compute } from '@google-cloud/compute';
 import { ref, set, get } from 'firebase/database';
 import { database } from '../../src/config/firebase';
 
@@ -25,18 +28,31 @@ export class MetadataManager {
   constructor() {
     this.projectId = 'azaleacompute';
     
-    this.auth = new GoogleAuth({
-      keyFile: './azaleacompute-fe11c72f4aa9.json',
-      scopes: [
-        'https://www.googleapis.com/auth/cloud-platform',
-        'https://www.googleapis.com/auth/compute',
-      ],
-    });
+    // Server-side only: Initialize Google Cloud clients
+    // These will only work in a Node.js environment, not in the browser
+    if (typeof window === 'undefined') {
+      try {
+        // @ts-ignore - Dynamic import for server-side only
+        const { GoogleAuth } = require('google-auth-library');
+        // @ts-ignore - Dynamic import for server-side only
+        const { Compute } = require('@google-cloud/compute');
+        
+        this.auth = new GoogleAuth({
+          keyFile: './azaleacompute-fe11c72f4aa9.json',
+          scopes: [
+            'https://www.googleapis.com/auth/cloud-platform',
+            'https://www.googleapis.com/auth/compute',
+          ],
+        });
 
-    this.compute = new Compute({
-      auth: this.auth,
-      projectId: this.projectId,
-    });
+        this.compute = new Compute({
+          auth: this.auth,
+          projectId: this.projectId,
+        });
+      } catch (error) {
+        console.warn('Google Cloud Compute libraries not available (server-side only)');
+      }
+    }
   }
 
   /**
