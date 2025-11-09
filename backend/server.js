@@ -1,0 +1,212 @@
+#!/usr/bin/env node
+/**
+ * AzaleaCloud Backend Server
+ * Runs in WebVM to handle Docker commands and desktop management
+ */
+
+const http = require('http');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+
+const execAsync = promisify(exec);
+const PORT = 3001;
+
+// Store active containers
+const containers = new Map();
+
+/**
+ * Execute Docker command
+ */
+async function runDockerCommand(command) {
+  try {
+    const { stdout, stderr } = await execAsync(`docker ${command}`, {
+      timeout: 30000,
+      maxBuffer: 1024 * 1024 * 10, // 10MB
+    });
+    return { success: true, output: stdout, error: stderr };
+  } catch (error) {
+    return { 
+      success: false, 
+      output: error.stdout || '', 
+      error: error.stderr || error.message 
+    };
+  }
+}
+
+/**
+ * Start desktop container
+ */
+async function startDesktop() {
+  try {
+    // Check if container already exists
+    const { stdout: existingContainers } = await execAsync(
+      'docker ps -a --filter "ancestor=dorowu/ubuntu-desktop-lxde-vnc" --format "{{.ID}}"'
+    );
+    
+    if (existingContainers.trim()) {
+      const containerId = existingContainers.trim().split('\n')[0];
+      // Start existing container
+      await runDockerCommand(`start ${containerId}`);
+      return {
+        success: true,
+        containerId,
+        port: 8080,
+        vncUrl: `http://localhost:8080/vnc.html`,
+      };
+    }
+
+    // Create new container
+    const { stdout: containerId } = await execAsync(
+      'docker run -d -p 8080:80 --name azalea-desktop-$(date +%s) dorowu/ubuntu-desktop-lxde-vnc'
+    );
+    
+    const id = containerId.trim();
+    containers.set(id, {
+      id,
+      port: 8080,
+      status: 'running',
+      createdAt: Date.now(),
+    });
+
+    return {
+      success: true,
+      containerId: id,
+      port: 8080,
+      vncUrl: `http://localhost:8080/vnc.html`,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
+
+/**
+ * Stop desktop container
+ */
+async function stopDesktop(containerId) {
+  try {
+    const result = await runDockerCommand(`stop ${containerId}`);
+    if (result.success) {
+      containers.delete(containerId);
+    }
+    return result;
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
+
+/**
+ * Get container status
+ */
+async function getContainerStatus(containerId) {
+  try {
+    const { stdout } = await execAsync(`docker ps -a --filter "id=${containerId}" --format "{{.Status}}"`);
+    return {
+      success: true,
+      status: stdout.trim() || 'not found',
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
+
+/**
+ * HTTP Server
+ */
+const server = http.createServer(async (req, res) => {
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Content-Type', 'application/json');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200);
+    res.end();
+    return;
+  }
+
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const path = url.pathname;
+
+  try {
+    if (path === '/api/health' && req.method === 'GET') {
+      res.writeHead(200);
+      res.end(JSON.stringify({ status: 'ok', timestamp: Date.now() }));
+      return;
+    }
+
+    if (path === '/api/desktop/start' && req.method === 'POST') {
+      const result = await startDesktop();
+      res.writeHead(result.success ? 200 : 500);
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (path === '/api/desktop/stop' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk.toString(); });
+      req.on('end', async () => {
+        const { containerId } = JSON.parse(body || '{}');
+        const result = await stopDesktop(containerId);
+        res.writeHead(result.success ? 200 : 500);
+        res.end(JSON.stringify(result));
+      });
+      return;
+    }
+
+    if (path === '/api/desktop/status' && req.method === 'GET') {
+      const containerId = url.searchParams.get('containerId');
+      if (containerId) {
+        const result = await getContainerStatus(containerId);
+        res.writeHead(200);
+        res.end(JSON.stringify(result));
+      } else {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: 'containerId required' }));
+      }
+      return;
+    }
+
+    if (path === '/api/containers' && req.method === 'GET') {
+      const { stdout } = await execAsync('docker ps -a --format "{{.ID}}|{{.Names}}|{{.Status}}"');
+      const containers = stdout.trim().split('\n').map(line => {
+        const [id, name, ...statusParts] = line.split('|');
+        return { id, name, status: statusParts.join('|') };
+      });
+      res.writeHead(200);
+      res.end(JSON.stringify({ containers }));
+      return;
+    }
+
+    // 404
+    res.writeHead(404);
+    res.end(JSON.stringify({ error: 'Not found' }));
+  } catch (error) {
+    res.writeHead(500);
+    res.end(JSON.stringify({ error: error.message }));
+  }
+});
+
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`AzaleaCloud Backend Server running on port ${PORT}`);
+  console.log(`Health check: http://localhost:${PORT}/api/health`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('Shutting down server...');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+

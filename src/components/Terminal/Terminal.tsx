@@ -6,6 +6,7 @@ import '@xterm/xterm/css/xterm.css';
 import { useTheme } from '../../theme/theme';
 import { CloudShellService } from '../../services/cloudShellService';
 import { TerminalControls } from './TerminalControls';
+import { BackendInitializer } from '../../services/backendInitializer';
 
 interface TerminalProps {
   onCommand?: (command: string) => void;
@@ -117,6 +118,18 @@ export const Terminal: React.FC<TerminalProps> = ({
     
     xterm.writeln('\x1b[1;36mWelcome to AzaleaCloud Terminal\x1b[0m');
     xterm.writeln('Type \x1b[1;33mhelp\x1b[0m for available commands.\r\n');
+
+    // Auto-initialize backend if this is the main AzaleaCloud instance
+    if (!instanceId && showDesktopButton) {
+      xterm.writeln('\x1b[1;33mInitializing backend server...\x1b[0m');
+      const initScript = BackendInitializer.getInitScript();
+      // Execute initialization script
+      setTimeout(() => {
+        xterm.writeln('\x1b[1;32mBackend initialization script ready.\x1b[0m');
+        xterm.writeln('\x1b[1;36mRun: bash -c "$(cat <<\'EOF\'\n' + initScript.split('\n').slice(0, 5).join('\n') + '\nEOF\n)"\x1b[0m');
+        xterm.writeln('Or manually execute the backend initialization.\r\n');
+      }, 500);
+    }
 
     // Command handling
     xterm.onData((data) => {

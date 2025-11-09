@@ -170,6 +170,14 @@ function AppContent() {
               <div style={{ padding: '0 16px' }}>
                 <ProviderSpecs />
               </div>
+              {currentProvider === 'azalea-cloud' && (
+                <div style={{ padding: '0 16px 8px 16px', fontSize: '12px', color: '#6C739C' }}>
+                  <span className="material-icons" style={{ fontSize: '14px', verticalAlign: 'middle', marginRight: '4px' }}>
+                    info
+                  </span>
+                  Backend server runs automatically in WebVM for Docker operations
+                </div>
+              )}
             </>
           )}
           <div style={{ flex: 1, minHeight: 0, padding: activeTab === 'terminal' ? '16px' : '0', display: 'flex' }}>
