@@ -12,6 +12,8 @@ import { WebVMLocal } from './components/WebVM/WebVMLocal';
 import { WebVMSSHX } from './components/WebVM/WebVMSSHX';
 import { SuperProvider } from './components/SuperProvider/SuperProvider';
 import { UltraProvider } from './components/UltraProvider/UltraProvider';
+import { DesktopViewer } from './components/DesktopViewer/DesktopViewer';
+import { DesktopService } from './services/desktopService';
 import { TokenRefreshManager } from '../lib/auth/metadataAuth';
 import { AuthKeyService } from '../lib/auth/authKeyService';
 import { startWorker } from './services/workerService';
@@ -22,6 +24,9 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState('terminal');
   const [tokenManager, setTokenManager] = useState<TokenRefreshManager | null>(null);
   const authKeyServiceRef = React.useRef(new AuthKeyService());
+  const desktopServiceRef = React.useRef(new DesktopService());
+  const [desktopOpen, setDesktopOpen] = useState(false);
+  const [desktopUrl, setDesktopUrl] = useState<string | null>(null);
 
   useEffect(() => {
     // Initialize token refresh manager
@@ -71,12 +76,40 @@ function AppContent() {
     };
   }, []);
 
+  const handleStartDesktop = async () => {
+    try {
+      const session = await desktopServiceRef.current.startDesktop();
+      setDesktopUrl(session.vncUrl);
+      setDesktopOpen(true);
+    } catch (error) {
+      console.error('Failed to start desktop:', error);
+      alert('Failed to start desktop. Please make sure Docker is running and the image is available.');
+    }
+  };
+
+  const handleCloseDesktop = async () => {
+    await desktopServiceRef.current.stopDesktop();
+    setDesktopOpen(false);
+    setDesktopUrl(null);
+  };
+
   const renderContent = () => {
+    // Show desktop if open
+    if (desktopOpen && desktopUrl) {
+      return <DesktopViewer vncUrl={desktopUrl} onClose={handleCloseDesktop} />;
+    }
+
     // Render provider-specific content based on current provider
     if (activeTab === 'terminal') {
       switch (currentProvider) {
         case 'azalea-cloud':
-          return <Terminal />;
+          return (
+            <Terminal 
+              onCommand={undefined}
+              onDesktopClick={handleStartDesktop}
+              showDesktopButton={true}
+            />
+          );
         case 'azalea-sshx':
           return <WebVMSSHX />;
         case 'azalea-local':
@@ -86,7 +119,7 @@ function AppContent() {
         case 'azalea-ultra':
           return <UltraProvider />;
         default:
-          return <Terminal />;
+          return <Terminal onCommand={undefined} />;
       }
     }
 

@@ -5,12 +5,15 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import { useTheme } from '../../theme/theme';
 import { CloudShellService } from '../../services/cloudShellService';
+import { TerminalControls } from './TerminalControls';
 
 interface TerminalProps {
   onCommand?: (command: string) => void;
   initialOutput?: string;
   instanceId?: string;
   compact?: boolean;
+  onDesktopClick?: () => void;
+  showDesktopButton?: boolean;
 }
 
 export const Terminal: React.FC<TerminalProps> = ({ 
@@ -18,6 +21,8 @@ export const Terminal: React.FC<TerminalProps> = ({
   initialOutput,
   instanceId,
   compact = false,
+  onDesktopClick,
+  showDesktopButton = false,
 }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -187,24 +192,29 @@ export const Terminal: React.FC<TerminalProps> = ({
       }}
     >
       {!compact && (
-        <div
-          style={{
-            padding: '8px 16px',
-            backgroundColor: theme.surfaceVariant,
-            borderBottom: `1px solid ${theme.border}`,
-            borderRadius: '8px 8px 0 0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            fontSize: '12px',
-            color: theme.textSecondary,
-          }}
-        >
-          <span className="material-icons" style={{ fontSize: '16px' }}>
-            terminal
-          </span>
-          <span>AzaleaCloud Terminal</span>
-        </div>
+        <>
+          {showDesktopButton && onDesktopClick && (
+            <TerminalControls onDesktopClick={onDesktopClick} showDesktop={showDesktopButton} />
+          )}
+          <div
+            style={{
+              padding: '8px 16px',
+              backgroundColor: theme.surfaceVariant,
+              borderBottom: `1px solid ${theme.border}`,
+              borderRadius: showDesktopButton ? '0' : '8px 8px 0 0',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '12px',
+              color: theme.textSecondary,
+            }}
+          >
+            <span className="material-icons" style={{ fontSize: '16px' }}>
+              terminal
+            </span>
+            <span>AzaleaCloud Terminal</span>
+          </div>
+        </>
       )}
       <div
         ref={terminalRef}
