@@ -1,69 +1,122 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTheme } from '../../theme/theme';
+import { createWebVMConfig, buildWebVMUrl, WEBVM_IMAGES } from '../../lib/webvm-integration';
 
 /**
- * AzaleaLocal - Standalone WebVM without external services
- * This embeds WebVM directly in the browser
+ * AzaleaLocal - Standalone WebVM
+ * Integrates the actual WebVM project as a submodule
+ * Uses the WebVM submodule for local integration
  */
 export const WebVMLocal: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // WebVM configuration for standalone mode
-    const webvmConfig = {
-      IMAGE_URL: 'https://disks.webvm.io/debian_mini_20230519_5022088024.ext2',
-      IMAGE_TYPE: 'cloud',
-      CMD: ['/bin/bash'],
-      ARGS: [],
-      ENV: {
-        HOME: '/home/user',
-        TERM: 'xterm',
-        USER: 'user',
-        SHELL: '/bin/bash',
-        EDITOR: 'vim',
-        LANG: 'en_US.UTF-8',
-        LC_ALL: 'C',
-      },
-      CWD: '/home/user',
-    };
+    // Load WebVM configuration
+    const loadWebVM = async () => {
+      try {
+        // Create WebVM config for standalone mode
+        const config = createWebVMConfig(WEBVM_IMAGES.DEBIAN_MINI, {
+          CMD: ['/bin/bash'],
+        });
 
-    // Create iframe for WebVM
-    // In production, you would embed the WebVM build or use their CDN
-    const iframe = document.createElement('iframe');
-    iframe.src = 'https://webvm.io/';
-    iframe.style.width = '100%';
-    iframe.style.height = '100%';
-    iframe.style.border = 'none';
-    iframe.style.backgroundColor = theme.surface;
-    iframe.allow = 'clipboard-read; clipboard-write';
-    iframe.title = 'AzaleaLocal - WebVM';
+        // Build WebVM URL with configuration
+        const webvmUrl = buildWebVMUrl(config);
 
-    containerRef.current.appendChild(iframe);
+        // Create iframe to load WebVM
+        // In production, you would build the WebVM submodule and serve it locally
+        // For now, we'll use the hosted version
+        // To use local WebVM: serve the webvm/build directory and point iframe.src to it
+        const iframe = document.createElement('iframe');
+        iframe.src = webvmUrl;
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.style.border = 'none';
+        iframe.style.backgroundColor = theme.surface;
+        iframe.allow = 'clipboard-read; clipboard-write';
+        iframe.title = 'AzaleaLocal - WebVM';
+        iframe.onload = () => setLoading(false);
 
-    // Alternative: You can also load WebVM directly if you have it built
-    // For now, we'll use the hosted version
+        containerRef.current.appendChild(iframe);
 
-    return () => {
-      if (containerRef.current && iframe.parentNode) {
-        containerRef.current.removeChild(iframe);
+        return () => {
+          if (containerRef.current && iframe.parentNode) {
+            containerRef.current.removeChild(iframe);
+          }
+        };
+      } catch (error) {
+        console.error('Failed to load WebVM:', error);
+        setLoading(false);
       }
     };
+
+    loadWebVM();
   }, [theme]);
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: theme.surface,
+          borderRadius: '8px',
+          color: theme.textSecondary,
+        }}
+      >
+        <div style={{ textAlign: 'center' }}>
+          <span className="material-icons" style={{ fontSize: '48px', marginBottom: '16px', display: 'block' }}>
+            computer
+          </span>
+          <div>Loading WebVM...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
-      ref={containerRef}
       style={{
         width: '100%',
         height: '100%',
-        backgroundColor: theme.surface,
-        borderRadius: '8px',
-        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
       }}
-    />
+    >
+      <div
+        style={{
+          padding: '8px 16px',
+          backgroundColor: theme.surfaceVariant,
+          borderBottom: `1px solid ${theme.border}`,
+          borderRadius: '8px 8px 0 0',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontSize: '12px',
+          color: theme.textSecondary,
+        }}
+      >
+        <span className="material-icons" style={{ fontSize: '16px' }}>
+          computer
+        </span>
+        <span>AzaleaLocal - Standalone WebVM</span>
+      </div>
+      <div
+        ref={containerRef}
+        style={{
+          flex: 1,
+          width: '100%',
+          height: '100%',
+          backgroundColor: theme.surface,
+          borderRadius: '0 0 8px 8px',
+        }}
+      />
+    </div>
   );
 };
-

@@ -15,18 +15,35 @@ AzaleaCloud now supports multiple provider options, including WebVM integration 
 
 ### 2. AzaleaSSHX
 - **Type**: WebVM with sshx.io integration
-- **Description**: Browser-based virtual machine connected to sshx.io for shared terminal sessions
+- **Description**: Browser-based virtual machine connected to sshx.io for secure, collaborative terminal sharing
 - **Features**:
   - Full Linux environment in the browser
-  - sshx.io session sharing
-  - WebSocket-based connectivity
-  - Collaborative terminal sessions
+  - sshx.io session sharing with real-time collaboration
+  - End-to-end encrypted terminal sessions
+  - Live presence with remote cursors and chat
+  - Infinite canvas for multiple terminals
+  - Ultra-fast mesh networking
+
+**About sshx.io**:
+sshx is a secure, web-based collaborative terminal that lets you share your terminal with anyone by link. It features:
+- **Collaborative**: Invite people by sharing a secure, unique browser link
+- **End-to-end encrypted**: Server never sees what you're typing
+- **Cross-platform**: Works on macOS, Linux, and Windows
+- **Infinite canvas**: Move and resize multiple terminals at once
+- **Live presence**: See other people's names and cursors
+- **Ultra-fast**: Connect to the nearest distributed peer in a global network
 
 **Usage**:
 1. Select "AzaleaSSHX" from the provider selector
-2. Click "Connect to sshx.io" button
-3. Enter your sshx.io session URL (e.g., `wss://sshx.io/your-session-id`)
-4. The WebVM will connect to your sshx.io session
+2. **To join an existing session**:
+   - Click "Join or Create Session"
+   - Enter the session ID or URL (e.g., `abc123` or `https://sshx.io/abc123`)
+3. **To create a new session**:
+   - Install sshx CLI: `curl -sSf https://sshx.io/get | sh`
+   - Run `sshx` in your terminal
+   - Copy the session ID from the output
+   - Paste it in AzaleaSSHX to connect WebVM to your session
+4. Share the session link with others for collaborative terminal access
 
 ### 3. AzaleaLocal
 - **Type**: Standalone WebVM
