@@ -146,15 +146,43 @@ export const Terminal: React.FC<TerminalProps> = ({ onCommand, initialOutput }) 
 
   return (
     <div
-      ref={terminalRef}
       style={{
         width: '100%',
         height: '100%',
-        padding: '16px',
-        backgroundColor: theme.surface,
-        borderRadius: '8px',
+        display: 'flex',
+        flexDirection: 'column',
       }}
-    />
+    >
+      <div
+        style={{
+          padding: '8px 16px',
+          backgroundColor: theme.surfaceVariant,
+          borderBottom: `1px solid ${theme.border}`,
+          borderRadius: '8px 8px 0 0',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontSize: '12px',
+          color: theme.textSecondary,
+        }}
+      >
+        <span className="material-icons" style={{ fontSize: '16px' }}>
+          cloud
+        </span>
+        <span>AzaleaCloud Terminal</span>
+      </div>
+      <div
+        ref={terminalRef}
+        style={{
+          flex: 1,
+          width: '100%',
+          height: '100%',
+          padding: '16px',
+          backgroundColor: theme.surface,
+          borderRadius: '0 0 8px 8px',
+        }}
+      />
+    </div>
   );
 };
 

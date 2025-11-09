@@ -6,7 +6,10 @@ A free cloud computing service with a beautiful, modern interface built with Typ
 
 - 🎨 Beautiful UI with Lavender Sapphire Mist color palette
 - 🌓 Dark and Light mode support
-- 💻 Full-featured terminal interface
+- 💻 **Multiple Provider Options**:
+  - **AzaleaCloud**: Cloud shell with unlimited access
+  - **AzaleaSSHX**: WebVM with sshx.io integration for shared sessions
+  - **AzaleaLocal**: Standalone WebVM running entirely in the browser
 - 🔐 Automatic authentication key management
 - 🔄 Background token refresh using metadata server
 - 👥 **Unlimited user access with automated service account creation**

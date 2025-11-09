@@ -1,15 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { ThemeProvider } from './theme/theme';
+import { ProviderProvider } from './context/ProviderContext';
 import { Header } from './components/Header/Header';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { Terminal } from './components/Terminal/Terminal';
 import { AuthKeys } from './components/AuthKeys/AuthKeys';
 import { AccountManager } from './components/AccountManager/AccountManager';
+import { ProviderSelector } from './components/ProviderSelector/ProviderSelector';
+import { WebVMLocal } from './components/WebVM/WebVMLocal';
+import { WebVMSSHX } from './components/WebVM/WebVMSSHX';
 import { TokenRefreshManager } from '../lib/auth/metadataAuth';
 import { AuthKeyService } from '../lib/auth/authKeyService';
 import { startWorker } from './services/workerService';
+import { useProvider } from './context/ProviderContext';
 
 function AppContent() {
+  const { currentProvider } = useProvider();
   const [activeTab, setActiveTab] = useState('terminal');
   const [tokenManager, setTokenManager] = useState<TokenRefreshManager | null>(null);
   const authKeyServiceRef = React.useRef(new AuthKeyService());
@@ -63,9 +69,22 @@ function AppContent() {
   }, []);
 
   const renderContent = () => {
+    // Render provider-specific content based on current provider
+    if (activeTab === 'terminal') {
+      switch (currentProvider) {
+        case 'azalea-cloud':
+          return <Terminal />;
+        case 'azalea-sshx':
+          return <WebVMSSHX />;
+        case 'azalea-local':
+          return <WebVMLocal />;
+        default:
+          return <Terminal />;
+      }
+    }
+
+    // Other tabs are provider-agnostic
     switch (activeTab) {
-      case 'terminal':
-        return <Terminal />;
       case 'accounts':
         return <AccountManager />;
       case 'auth':
@@ -100,9 +119,14 @@ function AppContent() {
             overflow: 'auto',
             display: 'flex',
             flexDirection: 'column',
+            padding: '16px',
+            gap: '16px',
           }}
         >
-          {renderContent()}
+          {activeTab === 'terminal' && <ProviderSelector />}
+          <div style={{ flex: 1, minHeight: 0 }}>
+            {renderContent()}
+          </div>
         </main>
       </div>
     </div>
@@ -112,7 +136,9 @@ function AppContent() {
 function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <ProviderProvider>
+        <AppContent />
+      </ProviderProvider>
     </ThemeProvider>
   );
 }
