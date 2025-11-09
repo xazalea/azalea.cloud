@@ -2,7 +2,7 @@
  * Provider Types
  */
 
-export type ProviderType = 'azalea-cloud' | 'azalea-sshx' | 'azalea-local' | 'azalea-super';
+export type ProviderType = 'azalea-cloud' | 'azalea-sshx' | 'azalea-local' | 'azalea-super' | 'azalea-ultra';
 
 export interface Provider {
   id: ProviderType;
@@ -71,6 +71,20 @@ export const PROVIDERS: Record<ProviderType, Provider> = {
       gpu: 'Dual NVIDIA T4 (Combined)',
       storage: '200 GB SSD (2x100)',
       network: '20 Gbps (2x10)',
+    },
+  },
+  'azalea-ultra': {
+    id: 'azalea-ultra',
+    name: 'AzaleaUltra',
+    description: 'Triple-instance + WebVM combined power (3x AzaleaCloud + WebVM)',
+    icon: 'rocket_launch',
+    enabled: true,
+    specs: {
+      cpu: '14 vCPU Cores (3x4 + 2)',
+      ram: '52 GB RAM (3x16 + 4)',
+      gpu: 'Triple NVIDIA T4 + WebVM GPU',
+      storage: '320 GB SSD (3x100 + 20)',
+      network: '31 Gbps (3x10 + 1)',
     },
   },
 };

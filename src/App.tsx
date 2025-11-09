@@ -11,6 +11,7 @@ import { ProviderSpecs } from './components/ProviderSpecs/ProviderSpecs';
 import { WebVMLocal } from './components/WebVM/WebVMLocal';
 import { WebVMSSHX } from './components/WebVM/WebVMSSHX';
 import { SuperProvider } from './components/SuperProvider/SuperProvider';
+import { UltraProvider } from './components/UltraProvider/UltraProvider';
 import { TokenRefreshManager } from '../lib/auth/metadataAuth';
 import { AuthKeyService } from '../lib/auth/authKeyService';
 import { startWorker } from './services/workerService';
@@ -82,6 +83,8 @@ function AppContent() {
           return <WebVMLocal />;
         case 'azalea-super':
           return <SuperProvider />;
+        case 'azalea-ultra':
+          return <UltraProvider />;
         default:
           return <Terminal />;
       }
