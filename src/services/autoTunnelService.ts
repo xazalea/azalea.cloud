@@ -76,10 +76,39 @@ export class AutoTunnelService {
       return firebaseTunnel.url;
     }
 
-    // Try to get tunnel from backend API
-    onProgress?.('Requesting tunnel from backend...');
+    // Try to get tunnel from Vercel first (best option for Vercel deployments)
+    onProgress?.('Requesting Vercel tunnel...');
     await new Promise((resolve) => setTimeout(resolve, 500));
     
+    try {
+      const vercelTunnelUrl = await this.tunnelService.setupVercelTunnel(port);
+      if (vercelTunnelUrl) {
+        onProgress?.(`Vercel tunnel created: ${vercelTunnelUrl.substring(0, 40)}...`);
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        
+        const tunnelInfo: TunnelInfo = {
+          url: vercelTunnelUrl,
+          port,
+          service: 'vercel',
+          createdAt: Date.now(),
+          expiresAt: Date.now() + (24 * 60 * 60 * 1000),
+        };
+        
+        onProgress?.('Caching tunnel URL...');
+        // Cache in both database cache and Firebase
+        await this.databaseCache.set(cacheKey, tunnelInfo, 24 * 60 * 60 * 1000);
+        await this.cacheTunnel(port, vercelTunnelUrl, 'vercel');
+        this.tunnelService.setCustomUrl(vercelTunnelUrl);
+        this.activeTunnels.set(port, tunnelInfo);
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        return vercelTunnelUrl;
+      }
+    } catch (error) {
+      onProgress?.(`Vercel tunnel unavailable, trying alternatives...`);
+      console.warn('Vercel tunnel not available:', error);
+    }
+
+    // Fallback: Try other tunnel services
     try {
       const tunnelUrl = await this.requestTunnelFromBackend(port);
       if (tunnelUrl) {
@@ -95,7 +124,6 @@ export class AutoTunnelService {
         };
         
         onProgress?.('Caching tunnel URL...');
-        // Cache in both database cache and Firebase
         await this.databaseCache.set(cacheKey, tunnelInfo, 24 * 60 * 60 * 1000);
         await this.cacheTunnel(port, tunnelUrl, 'cloudflared');
         this.tunnelService.setCustomUrl(tunnelUrl);

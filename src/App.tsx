@@ -22,9 +22,11 @@ import { TokenRefreshManager } from '../lib/auth/metadataAuth';
 import { AuthKeyService } from '../lib/auth/authKeyService';
 import { startWorker } from './services/workerService';
 import { useProvider } from './context/ProviderContext';
+import { useTheme } from './theme/theme';
 
 function AppContent() {
   const { currentProvider } = useProvider();
+  const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState('terminal');
   const [desktopLoading, setDesktopLoading] = useState(false);
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
@@ -274,29 +276,19 @@ function AppContent() {
             display: 'flex',
             flexDirection: 'column',
             backgroundColor: '#F0DAD5',
-            padding: '48px 64px',
-            gap: '32px',
           }}
         >
           {activeTab === 'terminal' && (
-            <>
-              <div style={{ padding: '0' }}>
-                <ProviderSelector />
-              </div>
-              <div style={{ padding: '0' }}>
-                <ProviderSpecs />
-              </div>
-            </>
+            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${theme.border}` }}>
+              <ProviderSelector />
+            </div>
           )}
           <div 
             style={{ 
               flex: 1, 
               minHeight: 0, 
-              padding: '32px', 
               display: 'flex', 
               overflow: 'hidden',
-              borderRadius: '20px',
-              backgroundColor: 'rgba(255, 255, 255, 0.05)',
             }}
           >
             {renderContent()}

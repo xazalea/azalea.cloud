@@ -14,7 +14,6 @@ export const CloudShellLayout: React.FC<CloudShellLayoutProps> = ({
   desktopLoading 
 }) => {
   const { theme } = useTheme();
-  const [activePane, setActivePane] = useState<'terminal' | 'editor' | 'files'>('terminal');
   const [showFiles, setShowFiles] = useState(true);
   const [showEditor, setShowEditor] = useState(false);
 
@@ -28,55 +27,55 @@ export const CloudShellLayout: React.FC<CloudShellLayoutProps> = ({
         backgroundColor: theme.surface,
       }}
     >
-      {/* Top toolbar */}
+      {/* Clean toolbar */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '8px',
-          padding: '8px 16px',
+          gap: '4px',
+          padding: '8px 12px',
           backgroundColor: theme.surfaceVariant,
           borderBottom: `1px solid ${theme.border}`,
         }}
       >
         <button
-          onClick={() => {
-            setShowFiles(!showFiles);
-            if (!showFiles) setActivePane('files');
-          }}
+          onClick={() => setShowFiles(!showFiles)}
           style={{
-            padding: '6px 12px',
+            padding: '4px 10px',
             backgroundColor: showFiles ? theme.accent : 'transparent',
             color: showFiles ? '#FFFFFF' : theme.text,
-            border: `1px solid ${showFiles ? theme.accent : theme.border}`,
-            borderRadius: '6px',
+            border: 'none',
+            borderRadius: '4px',
             cursor: 'pointer',
-            fontSize: '12px',
+            fontSize: '11px',
             fontWeight: 500,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
           }}
         >
-          <span className="material-icons" style={{ fontSize: '16px', verticalAlign: 'middle', marginRight: '4px' }}>
+          <span className="material-icons" style={{ fontSize: '14px' }}>
             folder
           </span>
           Files
         </button>
         <button
-          onClick={() => {
-            setShowEditor(!showEditor);
-            if (!showEditor) setActivePane('editor');
-          }}
+          onClick={() => setShowEditor(!showEditor)}
           style={{
-            padding: '6px 12px',
+            padding: '4px 10px',
             backgroundColor: showEditor ? theme.accent : 'transparent',
             color: showEditor ? '#FFFFFF' : theme.text,
-            border: `1px solid ${showEditor ? theme.accent : theme.border}`,
-            borderRadius: '6px',
+            border: 'none',
+            borderRadius: '4px',
             cursor: 'pointer',
-            fontSize: '12px',
+            fontSize: '11px',
             fontWeight: 500,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
           }}
         >
-          <span className="material-icons" style={{ fontSize: '16px', verticalAlign: 'middle', marginRight: '4px' }}>
+          <span className="material-icons" style={{ fontSize: '14px' }}>
             code
           </span>
           Editor
@@ -87,17 +86,20 @@ export const CloudShellLayout: React.FC<CloudShellLayoutProps> = ({
             onClick={onDesktopClick}
             disabled={desktopLoading}
             style={{
-              padding: '6px 12px',
+              padding: '4px 10px',
               backgroundColor: desktopLoading ? theme.textSecondary : theme.accent,
               color: '#FFFFFF',
               border: 'none',
-              borderRadius: '6px',
+              borderRadius: '4px',
               cursor: desktopLoading ? 'wait' : 'pointer',
-              fontSize: '12px',
+              fontSize: '11px',
               fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
             }}
           >
-            <span className="material-icons" style={{ fontSize: '16px', verticalAlign: 'middle', marginRight: '4px' }}>
+            <span className="material-icons" style={{ fontSize: '14px' }}>
               desktop_windows
             </span>
             Desktop
@@ -105,13 +107,13 @@ export const CloudShellLayout: React.FC<CloudShellLayoutProps> = ({
         )}
       </div>
 
-      {/* Main content area */}
+      {/* Main content */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* File browser sidebar */}
+        {/* File browser */}
         {showFiles && (
           <div
             style={{
-              width: '250px',
+              width: '220px',
               backgroundColor: theme.surfaceVariant,
               borderRight: `1px solid ${theme.border}`,
               overflow: 'auto',
@@ -126,7 +128,7 @@ export const CloudShellLayout: React.FC<CloudShellLayoutProps> = ({
           {showEditor && (
             <div
               style={{
-                height: '300px',
+                height: '250px',
                 display: 'flex',
                 flexDirection: 'column',
                 borderBottom: `1px solid ${theme.border}`,
@@ -136,11 +138,11 @@ export const CloudShellLayout: React.FC<CloudShellLayoutProps> = ({
             </div>
           )}
 
-          {/* Terminal - always visible and prominent */}
+          {/* Terminal - always visible */}
           <div
             style={{
               flex: 1,
-              minHeight: '300px',
+              minHeight: '200px',
               display: 'flex',
               flexDirection: 'column',
             }}
@@ -157,4 +159,3 @@ export const CloudShellLayout: React.FC<CloudShellLayoutProps> = ({
     </div>
   );
 };
-

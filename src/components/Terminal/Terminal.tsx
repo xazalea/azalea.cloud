@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -33,59 +33,32 @@ export const Terminal: React.FC<TerminalProps> = ({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const { theme } = useTheme();
   const cloudShellService = useRef(new CloudShellService());
-  const currentLineRef = useRef('');
-
-  const handleCommand = useCallback(async (command: string) => {
-    const parts = command.split(' ');
-    const cmd = parts[0].toLowerCase();
-
-    // Handle clear command immediately
-    if (cmd === 'clear') {
-      xtermRef.current?.clear();
-      return;
-    }
-
-    // Use cloud shell service for command execution
-    try {
-      const result = await cloudShellService.current.executeCommand(command);
-      
-      if (result.exitCode === 0) {
-        xtermRef.current?.writeln(result.output);
-      } else {
-        xtermRef.current?.writeln(`\x1b[1;31m${result.output}\x1b[0m`);
-      }
-    } catch (error) {
-      xtermRef.current?.writeln(`\x1b[1;31mError: ${error instanceof Error ? error.message : 'Unknown error'}\x1b[0m`);
-    }
-
-    // Also call the onCommand callback if provided
-    if (onCommand) {
-      onCommand(command);
-    }
-  }, [onCommand]);
 
   useEffect(() => {
     if (!terminalRef.current) return;
 
-    // Initialize xterm
+    // Initialize xterm with better settings
     const xterm = new XTerm({
       cursorBlink: true,
-      fontSize: compact ? 12 : 14,
-      fontFamily: '"Roboto Mono", "Courier New", monospace',
-      lineHeight: 1.2,
-      letterSpacing: 0,
+      fontSize: 13,
+      fontFamily: '"Fira Code", "Roboto Mono", "Courier New", monospace',
+      fontWeight: 400,
+      lineHeight: 1.4,
+      letterSpacing: 0.5,
       theme: {
         background: theme.surface,
         foreground: theme.text,
         cursor: theme.accent,
-        black: theme.midnight || '#424658',
+        cursorAccent: theme.surface,
+        selection: theme.accent + '40',
+        black: '#000000',
         red: theme.error,
         green: theme.success,
         yellow: theme.peach || '#DEA785',
         blue: theme.accent,
         magenta: theme.lavender || '#D9A69F',
         cyan: theme.sapphire || '#6C739C',
-        white: theme.textSecondary,
+        white: theme.text,
         brightBlack: theme.border,
         brightRed: theme.error,
         brightGreen: theme.success,
@@ -95,6 +68,7 @@ export const Terminal: React.FC<TerminalProps> = ({
         brightCyan: theme.sapphire || '#6C739C',
         brightWhite: theme.text,
       },
+      allowProposedApi: true,
     });
 
     const fitAddon = new FitAddon();
@@ -109,19 +83,13 @@ export const Terminal: React.FC<TerminalProps> = ({
     xtermRef.current = xterm;
     fitAddonRef.current = fitAddon;
 
-    // Write initial output
-    if (initialOutput) {
-      xterm.writeln(initialOutput);
-    }
-
     // Welcome message
-    const prompt = instanceId 
-      ? `\x1b[1;32mazalea@cloud-${instanceId}\x1b[0m:\x1b[1;34m~\x1b[0m$ `
-      : `\x1b[1;32mazalea@cloud\x1b[0m:\x1b[1;34m~\x1b[0m$ `;
-    
-    xterm.writeln('\x1b[1;36mWelcome to AzaleaCloud Terminal\x1b[0m');
-    
-    // Check authentication status and show it
+    xterm.writeln('\x1b[1;36m╔═══════════════════════════════════════════════════════════╗\x1b[0m');
+    xterm.writeln('\x1b[1;36m║\x1b[0m  \x1b[1;33mAzaleaCloud Terminal\x1b[0m                                    \x1b[1;36m║\x1b[0m');
+    xterm.writeln('\x1b[1;36m╚═══════════════════════════════════════════════════════════╝\x1b[0m');
+    xterm.writeln('');
+
+    // Check authentication status
     autoAuthService.waitForAuth().then((authStatus) => {
       if (authStatus.isAuthenticated) {
         xterm.writeln('\x1b[1;32m✓ Automatically authenticated via metadata server\x1b[0m');
@@ -129,51 +97,69 @@ export const Terminal: React.FC<TerminalProps> = ({
         xterm.writeln('\x1b[1;33m⚠ Authentication in progress...\x1b[0m');
       }
     });
-    
+
     xterm.writeln('Type \x1b[1;33mhelp\x1b[0m for available commands.\r\n');
 
-    // Backend is always ready (browser-based)
-    if (!instanceId && showDesktopButton) {
-      setTimeout(() => {
-        xterm.writeln('\x1b[1;32m✓ Backend server ready (browser-based)\x1b[0m');
-        xterm.writeln('\x1b[1;36mDesktop functionality is available.\r\n\x1b[0m');
-      }, 500);
+    if (initialOutput) {
+      xterm.write(initialOutput);
     }
 
     // Command handling
+    const handleCommand = async (command: string) => {
+      if (!command.trim()) {
+        xterm.write('\r\n');
+        return;
+      }
+
+      xterm.write('\r\n');
+
+      try {
+        const result = await cloudShellService.current.executeCommand(command);
+        xterm.write(result.output);
+        if (result.exitCode !== 0) {
+          xterm.write(`\r\n\x1b[31mProcess exited with code ${result.exitCode}\x1b[0m`);
+        }
+      } catch (error) {
+        xterm.write(`\r\n\x1b[31mError: ${error instanceof Error ? error.message : 'Unknown error'}\x1b[0m`);
+      }
+
+      // Write prompt
+      const prompt = `\r\n\x1b[1;36m$\x1b[0m `;
+      xterm.write(prompt);
+    };
+
+    // Initialize backend
+    BackendInitializer.initialize().catch(() => {
+      // Silently fail if backend not available
+    });
+
+    // Set up input handler
+    let currentLine = '';
     xterm.onData((data) => {
       if (data === '\r' || data === '\n') {
-        // Enter pressed
-        xterm.write('\r\n');
-        if (currentLineRef.current.trim()) {
-          handleCommand(currentLineRef.current.trim());
-        }
-        currentLineRef.current = '';
-        xterm.write(prompt);
+        handleCommand(currentLine);
+        currentLine = '';
       } else if (data === '\x7f' || data === '\b') {
         // Backspace
-        if (currentLineRef.current.length > 0) {
-          currentLineRef.current = currentLineRef.current.slice(0, -1);
+        if (currentLine.length > 0) {
+          currentLine = currentLine.slice(0, -1);
           xterm.write('\b \b');
         }
       } else if (data === '\x03') {
         // Ctrl+C
         xterm.write('^C\r\n');
-        currentLineRef.current = '';
+        currentLine = '';
+        const prompt = `\x1b[1;36m$\x1b[0m `;
         xterm.write(prompt);
-      } else if (data === '\x04') {
-        // Ctrl+D (EOF)
-        xterm.write('^D\r\n');
-        currentLineRef.current = '';
-        xterm.write(prompt);
-      } else if (data.charCodeAt(0) >= 32) {
+      } else if (data >= ' ') {
         // Printable characters
-        currentLineRef.current += data;
+        currentLine += data;
         xterm.write(data);
       }
     });
 
-    // Initial prompt
+    // Write initial prompt
+    const prompt = `\x1b[1;36m$\x1b[0m `;
     xterm.write(prompt);
 
     // Handle resize
@@ -182,24 +168,20 @@ export const Terminal: React.FC<TerminalProps> = ({
         fitAddonRef.current.fit();
       }
     };
-    
-    // Use ResizeObserver for better resize handling
-    const resizeObserver = new ResizeObserver(() => {
-      handleResize();
-    });
+
+    window.addEventListener('resize', handleResize);
     
     if (terminalRef.current) {
+      const resizeObserver = new ResizeObserver(handleResize);
       resizeObserver.observe(terminalRef.current);
     }
-    
-    window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      resizeObserver.disconnect();
+      resizeObserver?.disconnect();
       xterm.dispose();
     };
-  }, [theme, handleCommand, instanceId, compact, initialOutput]);
+  }, [theme, instanceId, compact, initialOutput]);
 
   return (
     <div
@@ -209,38 +191,16 @@ export const Terminal: React.FC<TerminalProps> = ({
         display: 'flex',
         flexDirection: 'column',
         backgroundColor: theme.surface,
-        borderRadius: compact ? '4px' : '8px',
+        borderRadius: '0',
         overflow: 'hidden',
       }}
     >
-      {!compact && (
-        <>
-          {showDesktopButton && onDesktopClick && (
-            <TerminalControls 
-              onDesktopClick={onDesktopClick} 
-              showDesktop={showDesktopButton}
-              loading={desktopLoading}
-            />
-          )}
-          <div
-            style={{
-              padding: '16px 24px',
-              backgroundColor: theme.surfaceVariant,
-              borderBottom: `1px solid ${theme.border}`,
-              borderRadius: showDesktopButton ? '0' : '12px 12px 0 0',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              fontSize: '14px',
-              color: theme.textSecondary,
-            }}
-          >
-            <span className="material-icons" style={{ fontSize: '16px' }}>
-              terminal
-            </span>
-            <span>AzaleaCloud Terminal</span>
-          </div>
-        </>
+      {!compact && showDesktopButton && onDesktopClick && (
+        <TerminalControls 
+          onDesktopClick={onDesktopClick} 
+          showDesktop={showDesktopButton}
+          loading={desktopLoading}
+        />
       )}
       <div
         ref={terminalRef}
@@ -249,7 +209,7 @@ export const Terminal: React.FC<TerminalProps> = ({
           width: '100%',
           height: '100%',
           minHeight: 0,
-          padding: compact ? '16px' : '32px',
+          padding: '16px',
           overflow: 'hidden',
         }}
       />

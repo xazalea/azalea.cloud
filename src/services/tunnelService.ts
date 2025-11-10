@@ -75,6 +75,32 @@ export class TunnelService {
   }
 
   /**
+   * Sets up a tunnel using Vercel Tunnel
+   * Uses Vercel's infrastructure to proxy to localhost
+   */
+  async setupVercelTunnel(port: number): Promise<string> {
+    try {
+      const response = await fetch('/api/tunnel/vercel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ port }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.url) {
+          this.tunnelUrl = data.url;
+          return data.url;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to setup Vercel tunnel:', error);
+    }
+
+    throw new Error('Failed to setup Vercel tunnel');
+  }
+
+  /**
    * Sets up a tunnel using Cloudflare Tunnel (cloudflared)
    * This would typically be done server-side
    */
