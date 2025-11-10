@@ -236,7 +236,7 @@ export class CloudShellAuthInterceptor {
     
     XMLHttpRequest.prototype.open = function(method: string, url: string | URL, async?: boolean, username?: string | null, password?: string | null) {
       (this as any)._url = url;
-      return originalXHROpen.call(this, method, url, async, username, password);
+      return originalXHROpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
     };
     
     XMLHttpRequest.prototype.send = function(body?: Document | XMLHttpRequestBodyInit | null) {
