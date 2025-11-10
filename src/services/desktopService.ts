@@ -6,6 +6,7 @@
 
 import { BrowserBackend } from './browserBackend';
 import { WebVMBackend } from './webvmBackend';
+import { TunnelService } from './tunnelService';
 
 export interface DesktopSession {
   containerId: string;
@@ -20,12 +21,27 @@ export class DesktopService {
   private readonly PORT = 8080;
   private browserBackend: BrowserBackend;
   private webvmBackend: WebVMBackend;
+  private tunnelService: TunnelService;
 
   constructor() {
     // Always use browser backend (always available)
     this.browserBackend = BrowserBackend.getInstance();
     // Fallback to WebVM backend if needed
     this.webvmBackend = new WebVMBackend({ host: 'localhost', port: 3001 });
+    // Initialize tunnel service
+    this.tunnelService = TunnelService.getInstance({ useOrigin: true });
+  }
+
+  /**
+   * Transforms a localhost URL to use current origin or tunnel
+   */
+  private transformVncUrl(url: string, port: number): string {
+    // If URL contains localhost, replace with tunnel service URL
+    if (url.includes('localhost') || url.includes('127.0.0.1')) {
+      return this.tunnelService.createVncUrl(port, '/vnc.html');
+    }
+    // Otherwise return as-is (might already be a tunnel URL)
+    return url;
   }
 
   /**
@@ -38,11 +54,17 @@ export class DesktopService {
       const browserResult = await this.browserBackend.startDesktop();
       
       if (browserResult.success && browserResult.data) {
+        // Transform URL to use current origin or tunnel
+        const transformedUrl = this.transformVncUrl(
+          browserResult.data.vncUrl,
+          browserResult.data.port
+        );
+        
         this.session = {
           containerId: browserResult.data.containerId,
           port: browserResult.data.port,
           status: 'running',
-          vncUrl: browserResult.data.vncUrl,
+          vncUrl: transformedUrl,
         };
         return this.session;
       }
@@ -53,11 +75,17 @@ export class DesktopService {
         if (isWebVMAvailable) {
           const webvmResult = await this.webvmBackend.startDesktop();
           if (webvmResult.success && webvmResult.containerId && webvmResult.vncUrl) {
+            // Transform URL to use current origin or tunnel
+            const transformedUrl = this.transformVncUrl(
+              webvmResult.vncUrl,
+              webvmResult.port || this.PORT
+            );
+            
             this.session = {
               containerId: webvmResult.containerId,
               port: webvmResult.port || this.PORT,
               status: 'running',
-              vncUrl: webvmResult.vncUrl,
+              vncUrl: transformedUrl,
             };
             return this.session;
           }
@@ -69,11 +97,17 @@ export class DesktopService {
 
       // If we get here, use browser backend result (even if it failed)
       if (browserResult.data) {
+        // Transform URL to use current origin or tunnel
+        const transformedUrl = this.transformVncUrl(
+          browserResult.data.vncUrl,
+          browserResult.data.port
+        );
+        
         this.session = {
           containerId: browserResult.data.containerId,
           port: browserResult.data.port,
           status: 'running',
-          vncUrl: browserResult.data.vncUrl,
+          vncUrl: transformedUrl,
         };
         return this.session;
       }

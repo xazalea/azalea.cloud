@@ -4,6 +4,8 @@
  * Always available, no server required
  */
 
+import { TunnelService } from './tunnelService';
+
 export interface BackendResponse<T = any> {
   success: boolean;
   data?: T;
@@ -14,10 +16,13 @@ export class BrowserBackend {
   private static instance: BrowserBackend;
   private backendReady: boolean = true; // Always ready in browser
   private desktopContainers: Map<string, { port: number; vncUrl: string; status: 'running' | 'stopped' }> = new Map();
+  private tunnelService: TunnelService;
 
   private constructor() {
     // Backend is always ready in browser mode
     console.log('Browser Backend initialized - always ready');
+    // Initialize tunnel service with current origin
+    this.tunnelService = TunnelService.getInstance({ useOrigin: true });
   }
 
   static getInstance(): BrowserBackend {
@@ -64,9 +69,9 @@ export class BrowserBackend {
       const containerId = `desktop-${Date.now()}`;
       const port = 8080;
       
-      // In browser mode, we'll use a VNC viewer that connects to a hosted service
-      // or we can use a noVNC client with a WebSocket proxy
-      const vncUrl = `http://localhost:${port}/vnc.html`;
+      // Use tunnel service to create VNC URL
+      // This will use current origin or tunneling service if configured
+      const vncUrl = this.tunnelService.createVncUrl(port, '/vnc.html');
 
       this.desktopContainers.set(containerId, {
         port,
