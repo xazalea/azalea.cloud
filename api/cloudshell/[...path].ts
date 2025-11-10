@@ -28,13 +28,19 @@ export default async function handler(
     
     try {
       // Try metadata server (if running in GCP)
+      // Use AbortController for timeout compatibility
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1000);
+      
       const metadataResponse = await fetch(
         'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
         {
           headers: { 'Metadata-Flavor': 'Google' },
-          signal: AbortSignal.timeout(1000),
+          signal: controller.signal,
         }
       );
+
+      clearTimeout(timeoutId);
 
       if (metadataResponse.ok) {
         const data = await metadataResponse.json();

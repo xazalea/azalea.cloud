@@ -22,30 +22,56 @@ export interface AuthKey {
 
 /**
  * Fetches an access token from the metadata server
+ * Uses API endpoint in browser to avoid mixed content errors
  */
 export async function fetchMetadataToken(): Promise<AccessToken> {
+  const isBrowser = typeof window !== 'undefined';
+  
   try {
-    const response = await fetch(
-      'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
-      {
-        headers: {
-          'Metadata-Flavor': 'Google',
-        },
+    if (isBrowser) {
+      // In browser, use API endpoint (server-side can access metadata)
+      const response = await fetch('/api/auth/token');
+      
+      if (!response.ok) {
+        throw new Error(`Token API responded with status: ${response.status}`);
       }
-    );
+      
+      const data = await response.json();
+      if (!data.token) {
+        throw new Error('No token available from API');
+      }
+      
+      const expiresAt = Date.now() + ((data.expires_in || 3600) * 1000);
+      
+      return {
+        token: data.token,
+        expiresAt,
+        createdAt: Date.now(),
+      };
+    } else {
+      // Server-side, can directly access metadata server
+      const response = await fetch(
+        'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+        {
+          headers: {
+            'Metadata-Flavor': 'Google',
+          },
+        }
+      );
 
-    if (!response.ok) {
-      throw new Error(`Metadata server responded with status: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Metadata server responded with status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const expiresAt = Date.now() + (data.expires_in * 1000);
+
+      return {
+        token: data.access_token,
+        expiresAt,
+        createdAt: Date.now(),
+      };
     }
-
-    const data = await response.json();
-    const expiresAt = Date.now() + (data.expires_in * 1000);
-
-    return {
-      token: data.access_token,
-      expiresAt,
-      createdAt: Date.now(),
-    };
   } catch (error) {
     console.error('Failed to fetch metadata token:', error);
     throw error;
