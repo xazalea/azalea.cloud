@@ -22,6 +22,7 @@ export class CloudMetadataService {
   private currentToken: string | null = null;
   private tokenExpiresAt: number = 0;
   private refreshTimer: NodeJS.Timeout | null = null;
+  private isBrowser: boolean;
 
   constructor(config: CloudServiceConfig = {}) {
     this.config = {
@@ -31,21 +32,37 @@ export class CloudMetadataService {
       refreshBufferMinutes: 5,
       ...config,
     };
+    // Detect if running in browser (to avoid mixed content errors)
+    this.isBrowser = typeof window !== 'undefined';
   }
 
   /**
    * Checks if we're running in a Google Cloud environment
+   * Uses API endpoint in browser to avoid mixed content errors
    */
   async isCloudEnvironment(): Promise<boolean> {
     try {
-      const response = await fetch(
-        'http://metadata.google.internal/computeMetadata/v1/instance/',
-        {
-          headers: { 'Metadata-Flavor': 'Google' },
-          signal: AbortSignal.timeout(1000),
+      if (this.isBrowser) {
+        // In browser, use API endpoint (server-side can access metadata)
+        const response = await fetch('/api/environment', {
+          signal: AbortSignal.timeout(2000),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          return data.isCloudEnvironment === true;
         }
-      );
-      return response.ok;
+        return false;
+      } else {
+        // Server-side, can directly access metadata server
+        const response = await fetch(
+          'http://metadata.google.internal/computeMetadata/v1/instance/',
+          {
+            headers: { 'Metadata-Flavor': 'Google' },
+            signal: AbortSignal.timeout(1000),
+          }
+        );
+        return response.ok;
+      }
     } catch {
       return false;
     }
@@ -53,38 +70,65 @@ export class CloudMetadataService {
 
   /**
    * Fetches an access token from the metadata server
+   * Uses API endpoint in browser to avoid mixed content errors
    */
   async fetchMetadataToken(): Promise<MetadataTokenResponse> {
-    if (!this.config.metadataServerUrl) {
-      throw new Error('Metadata server URL not configured');
+    if (this.isBrowser) {
+      // In browser, use API endpoint (server-side can access metadata)
+      const response = await fetch('/api/auth/token');
+      if (!response.ok) {
+        throw new Error(`Token API responded with status: ${response.status}`);
+      }
+      const data = await response.json();
+      if (!data.token) {
+        throw new Error('No token available from API');
+      }
+      return {
+        access_token: data.token,
+        expires_in: data.expires_in || 3600,
+        token_type: data.token_type || 'Bearer',
+      };
+    } else {
+      // Server-side, can directly access metadata server
+      if (!this.config.metadataServerUrl) {
+        throw new Error('Metadata server URL not configured');
+      }
+
+      const response = await fetch(this.config.metadataServerUrl, {
+        headers: { 'Metadata-Flavor': 'Google' },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Metadata server responded with status: ${response.status}`);
+      }
+
+      return await response.json();
     }
-
-    const response = await fetch(this.config.metadataServerUrl, {
-      headers: { 'Metadata-Flavor': 'Google' },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Metadata server responded with status: ${response.status}`);
-    }
-
-    return await response.json();
   }
 
   /**
    * Fetches a token from custom metadata
+   * Uses API endpoint in browser to avoid mixed content errors
    */
   async fetchCustomMetadataToken(): Promise<string> {
-    const metadataUrl = `http://metadata.google.internal/computeMetadata/v1/instance/attributes/${this.config.customMetadataKey}`;
-    
-    const response = await fetch(metadataUrl, {
-      headers: { 'Metadata-Flavor': 'Google' },
-    });
+    if (this.isBrowser) {
+      // In browser, we need an API endpoint for custom metadata
+      // For now, this will fail gracefully and fall back to default token
+      throw new Error('Custom metadata tokens require server-side access');
+    } else {
+      // Server-side, can directly access metadata server
+      const metadataUrl = `http://metadata.google.internal/computeMetadata/v1/instance/attributes/${this.config.customMetadataKey}`;
+      
+      const response = await fetch(metadataUrl, {
+        headers: { 'Metadata-Flavor': 'Google' },
+      });
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch custom metadata token: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch custom metadata token: ${response.status}`);
+      }
+
+      return await response.text();
     }
-
-    return await response.text();
   }
 
   /**
@@ -171,20 +215,28 @@ export class CloudMetadataService {
 
   /**
    * Gets instance metadata
+   * Uses API endpoint in browser to avoid mixed content errors
    */
   async getInstanceMetadata(): Promise<Record<string, string>> {
-    const response = await fetch(
-      'http://metadata.google.internal/computeMetadata/v1/instance/?recursive=true',
-      {
-        headers: { 'Metadata-Flavor': 'Google' },
+    if (this.isBrowser) {
+      // In browser, we'd need an API endpoint for this
+      // For now, return empty object
+      throw new Error('Instance metadata requires server-side access');
+    } else {
+      // Server-side, can directly access metadata server
+      const response = await fetch(
+        'http://metadata.google.internal/computeMetadata/v1/instance/?recursive=true',
+        {
+          headers: { 'Metadata-Flavor': 'Google' },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch instance metadata: ${response.status}`);
       }
-    );
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch instance metadata: ${response.status}`);
+      return await response.json();
     }
-
-    return await response.json();
   }
 
   /**

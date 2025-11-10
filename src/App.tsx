@@ -55,14 +55,13 @@ function AppContent() {
       setTimeout(() => {
         const checkMetadataServer = async () => {
           try {
-            // Try to fetch from metadata server with very short timeout
+            // Use API endpoint to avoid mixed content errors
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 200); // 200ms timeout
             
             const response = await fetch(
-              'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+              '/api/auth/token',
               {
-                headers: { 'Metadata-Flavor': 'Google' },
                 signal: controller.signal,
               }
             ).catch(() => null); // Catch all errors immediately
@@ -70,8 +69,11 @@ function AppContent() {
             clearTimeout(timeoutId);
             
             if (response?.ok) {
-              manager.start().catch(() => {}); // Don't wait
-              setTokenManager(manager);
+              const data = await response.json().catch(() => null);
+              if (data?.token) {
+                manager.start().catch(() => {}); // Don't wait
+                setTokenManager(manager);
+              }
             }
           } catch (error) {
             // Silently fail - don't block UI

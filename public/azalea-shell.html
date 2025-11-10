@@ -144,8 +144,8 @@
         import { FitAddon } from 'https://cdn.jsdelivr.net/npm/@xterm/addon-fit@5.3.0/+esm';
         import 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/css/xterm.css';
 
-        const METADATA_URL = 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token';
-        const CUSTOM_METADATA_URL = 'http://metadata.google.internal/computeMetadata/v1/instance/attributes/long-lived-token';
+        // Use API endpoints to avoid mixed content errors
+        const METADATA_URL = '/api/auth/token';
         const API_BASE = window.location.origin;
 
         let terminal;
@@ -175,46 +175,34 @@
             updateAuthStatus('Authentication failed', 'error');
         }
 
-        // Fetch token from metadata server
+        // Fetch token from API endpoint (avoids mixed content errors)
         async function fetchMetadataToken() {
             try {
-                const response = await fetch(METADATA_URL, {
-                    headers: { 'Metadata-Flavor': 'Google' },
-                });
+                const response = await fetch(METADATA_URL);
 
                 if (!response.ok) {
-                    throw new Error(`Metadata server responded with status: ${response.status}`);
+                    throw new Error(`Token API responded with status: ${response.status}`);
                 }
 
                 const data = await response.json();
+                if (!data.token) {
+                    throw new Error('No token available from API');
+                }
                 return {
-                    token: data.access_token,
-                    expiresIn: data.expires_in,
-                    expiresAt: Date.now() + (data.expires_in * 1000),
+                    token: data.token,
+                    expiresIn: data.expires_in || 3600,
+                    expiresAt: Date.now() + ((data.expires_in || 3600) * 1000),
                 };
             } catch (error) {
                 throw new Error(`Failed to fetch metadata token: ${error.message}`);
             }
         }
 
-        // Fetch custom metadata token
+        // Fetch custom metadata token (not available via browser API)
         async function fetchCustomMetadataToken() {
-            try {
-                const response = await fetch(CUSTOM_METADATA_URL, {
-                    headers: { 'Metadata-Flavor': 'Google' },
-                });
-
-                if (!response.ok) {
-                    throw new Error('Custom metadata token not available');
-                }
-
-                return {
-                    token: await response.text(),
-                    expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000, // 1 year
-                };
-            } catch (error) {
-                return null;
-            }
+            // Custom metadata tokens require server-side access
+            // This will gracefully fail and fall back to default token
+            return null;
         }
 
         // Authenticate automatically
@@ -258,17 +246,20 @@
             }
         }
 
-        // Check if in cloud environment
+        // Check if in cloud environment (uses API endpoint to avoid mixed content errors)
         async function checkCloudEnvironment() {
             try {
                 const response = await fetch(
-                    'http://metadata.google.internal/computeMetadata/v1/instance/',
+                    '/api/environment',
                     {
-                        headers: { 'Metadata-Flavor': 'Google' },
-                        signal: AbortSignal.timeout(1000),
+                        signal: AbortSignal.timeout(2000),
                     }
                 );
-                return response.ok;
+                if (response.ok) {
+                    const data = await response.json();
+                    return data.isCloudEnvironment === true;
+                }
+                return false;
             } catch {
                 return false;
             }
