@@ -32,31 +32,19 @@ export const DesktopViewer: React.FC<DesktopViewerProps> = ({ vncUrl, onClose })
 
         setDesktopWindow(newWindow);
 
-        // Try to enter fullscreen after window loads
-        newWindow.addEventListener('load', () => {
-          setTimeout(() => {
-            try {
-              const doc = newWindow.document;
-              if (doc.documentElement.requestFullscreen) {
-                doc.documentElement.requestFullscreen().catch(() => {
-                  // Fullscreen failed, but window is open
-                  console.log('Fullscreen not available');
-                });
-              }
-            } catch (e) {
-              console.log('Fullscreen request failed:', e);
-            }
-          }, 1000);
-        });
-
-        // Monitor window close
+        // Monitor window close (safe, doesn't access cross-origin content)
         const checkClosed = setInterval(() => {
-          if (newWindow.closed) {
-            clearInterval(checkClosed);
-            setDesktopWindow(null);
-            if (onClose) {
-              onClose();
+          try {
+            if (newWindow.closed) {
+              clearInterval(checkClosed);
+              setDesktopWindow(null);
+              if (onClose) {
+                onClose();
+              }
             }
+          } catch (e) {
+            // Cross-origin access blocked, stop checking
+            clearInterval(checkClosed);
           }
         }, 500);
 

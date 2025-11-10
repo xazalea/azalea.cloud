@@ -135,7 +135,8 @@ function AppContent() {
       // Small delay to show completion
       await new Promise((resolve) => setTimeout(resolve, 500));
       
-      // Open desktop in a new tab/window with fullscreen option
+      // Open desktop in a new tab/window
+      // Note: We can't access cross-origin window properties, so we just open it
       const desktopWindow = window.open(
         session.vncUrl,
         'azalea-desktop',
@@ -145,19 +146,18 @@ function AppContent() {
       if (desktopWindow) {
         updateStep('complete', 'completed', 'Desktop window opened');
         
-        // Try to request fullscreen after a short delay
-        desktopWindow.addEventListener('load', () => {
-          setTimeout(() => {
-            try {
-              if (desktopWindow.document.documentElement.requestFullscreen) {
-                desktopWindow.document.documentElement.requestFullscreen();
-              }
-            } catch (e) {
-              // Fullscreen request failed, but window is open
-              console.log('Fullscreen not available, but desktop window is open');
+        // Monitor if window is closed (this is safe, doesn't access cross-origin content)
+        const checkClosed = setInterval(() => {
+          try {
+            if (desktopWindow.closed) {
+              clearInterval(checkClosed);
+              setDesktopOpen(false);
             }
-          }, 1000);
-        });
+          } catch (e) {
+            // Cross-origin access blocked, stop checking
+            clearInterval(checkClosed);
+          }
+        }, 1000);
         
         // Store reference for cleanup
         setDesktopUrl(session.vncUrl);
@@ -169,7 +169,7 @@ function AppContent() {
           setShowProgress(false);
         }, 1500);
         
-        showSuccess('Desktop Started', 'Desktop has been opened in a new window.');
+        showSuccess('Desktop Started', 'Desktop has been opened in a new window. Press F11 for fullscreen.');
       } else {
         // Popup blocked, show error
         updateStep('complete', 'error', 'Popup blocked');
