@@ -109,23 +109,25 @@ export class CloudShellAuthInterceptor {
         clearInterval(checkAuth2);
         
         const originalInit = window.gapi.auth2.init;
-        window.gapi.auth2.init = async (config: any) => {
-          console.log('Intercepting gapi.auth2.init for auto-authentication');
-          
-          // Call original init
-          const authInstance = await originalInit.call(window.gapi.auth2, config);
-          
-          // Auto-sign in if we have a token
-          if (this.accessToken && authInstance) {
-            try {
-              await this.setAuthToken(authInstance);
-            } catch (err) {
-              console.error('Failed to auto-authenticate:', err);
+        if (originalInit) {
+          window.gapi.auth2.init = async (config: any) => {
+            console.log('Intercepting gapi.auth2.init for auto-authentication');
+            
+            // Call original init
+            const authInstance = await originalInit.call(window.gapi!.auth2, config);
+            
+            // Auto-sign in if we have a token
+            if (this.accessToken && authInstance) {
+              try {
+                await this.setAuthToken(authInstance);
+              } catch (err) {
+                console.error('Failed to auto-authenticate:', err);
+              }
             }
-          }
-          
-          return authInstance;
-        };
+            
+            return authInstance;
+          };
+        }
       }
     }, 100);
 
@@ -140,12 +142,16 @@ export class CloudShellAuthInterceptor {
     if (!this.accessToken || !authInstance) return;
 
     try {
-      // Set token on gapi client
-      if (window.gapi?.client) {
-        window.gapi.client.setToken({
+      // Set token on gapi client (if available)
+      if (window.gapi?.client && (window.gapi.client as any).setToken) {
+        (window.gapi.client as any).setToken({
           access_token: this.accessToken,
         });
       }
+
+      // Store token globally for Cloud Shell to use
+      (window as any).azaleaAccessToken = this.accessToken;
+      (window as any).azaleaAuthenticated = true;
 
       // Try to get current user and update with our token
       const currentUser = authInstance.currentUser?.get();
@@ -155,12 +161,14 @@ export class CloudShellAuthInterceptor {
       } else {
         // Try to sign in silently with our token
         try {
-          await authInstance.signIn({
-            prompt: 'none',
-          }).catch(() => {
-            // If silent sign-in fails, we'll use the token directly
-            console.log('Silent sign-in not available, using token directly');
-          });
+          if (authInstance.signIn) {
+            await authInstance.signIn({
+              prompt: 'none',
+            }).catch(() => {
+              // If silent sign-in fails, we'll use the token directly
+              console.log('Silent sign-in not available, using token directly');
+            });
+          }
         } catch (err) {
           console.log('Using token-based authentication');
         }
@@ -224,23 +232,21 @@ export class CloudShellAuthInterceptor {
     // Also intercept XMLHttpRequest
     const originalXHROpen = XMLHttpRequest.prototype.open;
     const originalXHRSend = XMLHttpRequest.prototype.send;
+    const interceptorRef = this; // Capture 'this' for use in functions
     
-    XMLHttpRequest.prototype.open = function(method: string, url: string | URL, ...args: any[]) {
+    XMLHttpRequest.prototype.open = function(method: string, url: string | URL, async?: boolean, username?: string | null, password?: string | null) {
       (this as any)._url = url;
-      return originalXHROpen.call(this, method, url, ...args);
+      return originalXHROpen.call(this, method, url, async, username, password);
     };
     
-    XMLHttpRequest.prototype.send = function(body?: any) {
+    XMLHttpRequest.prototype.send = function(body?: Document | XMLHttpRequestBodyInit | null) {
       const url = (this as any)._url;
       if (url && (url.includes('accounts.google.com') || url.includes('oauth2')) && 
-          this.authInterceptor?.accessToken) {
-        this.setRequestHeader('Authorization', `Bearer ${this.authInterceptor.accessToken}`);
+          interceptorRef.accessToken) {
+        this.setRequestHeader('Authorization', `Bearer ${interceptorRef.accessToken}`);
       }
       return originalXHRSend.call(this, body);
     };
-    
-    // Store reference to interceptor
-    (XMLHttpRequest.prototype as any).authInterceptor = this;
 
     // Monitor for OAuth iframes and try to auto-complete
     const observer = new MutationObserver(() => {
@@ -287,9 +293,9 @@ export class CloudShellAuthInterceptor {
         scope: 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/drive',
       });
 
-      // Set access token if available
-      if (this.accessToken && window.gapi.client) {
-        window.gapi.client.setToken({
+      // Set access token if available (using type assertion since setToken may not be in types)
+      if (this.accessToken && window.gapi.client && (window.gapi.client as any).setToken) {
+        (window.gapi.client as any).setToken({
           access_token: this.accessToken,
         });
         console.log('Set gapi client token for auto-authentication');
