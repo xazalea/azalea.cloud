@@ -14,16 +14,16 @@ export const ProviderSelector: React.FC = () => {
   return (
     <div
       style={{
-        padding: '32px 40px',
+        padding: '16px 20px',
         backgroundColor: theme.surfaceVariant,
-        borderRadius: '20px',
-        marginBottom: '32px',
+        borderRadius: '12px',
+        marginBottom: '24px',
         border: `1px solid ${theme.border}`,
       }}
     >
-      <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontSize: '14px', fontWeight: 600, color: theme.text }}>
-          Select Provider
+      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text }}>
+          Provider
         </div>
         {currentProvider === 'azalea-super' && (
           <div
@@ -66,7 +66,7 @@ export const ProviderSelector: React.FC = () => {
           </div>
         )}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {Object.values(providers).map((provider) => {
           const isActive = currentProvider === provider.id;
           return (
@@ -75,16 +75,16 @@ export const ProviderSelector: React.FC = () => {
               onClick={() => handleProviderChange(provider.id)}
               style={{
                 width: '100%',
-                padding: '12px 16px',
+                padding: '8px 12px',
                 backgroundColor: isActive ? theme.accent : theme.surface,
                 border: `1px solid ${isActive ? theme.accent : theme.border}`,
-                borderRadius: '6px',
+                borderRadius: '8px',
                 cursor: 'pointer',
                 color: isActive ? '#FFFFFF' : theme.text,
                 display: 'flex',
                 alignItems: 'center',
-                gap: '12px',
-                fontSize: '14px',
+                gap: '8px',
+                fontSize: '12px',
                 fontWeight: isActive ? 600 : 400,
                 transition: 'all 0.2s ease',
                 textAlign: 'left',
@@ -100,23 +100,14 @@ export const ProviderSelector: React.FC = () => {
                 }
               }}
             >
-              <span className="material-icons" style={{ fontSize: '20px' }}>
+              <span className="material-icons" style={{ fontSize: '16px' }}>
                 {provider.icon}
               </span>
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: isActive ? 600 : 500 }}>{provider.name}</div>
-                <div
-                  style={{
-                    fontSize: '12px',
-                    opacity: 0.8,
-                    marginTop: '2px',
-                  }}
-                >
-                  {provider.description}
-                </div>
+                <div style={{ fontWeight: isActive ? 600 : 500, fontSize: '12px' }}>{provider.name}</div>
               </div>
               {isActive && (
-                <span className="material-icons" style={{ fontSize: '18px' }}>
+                <span className="material-icons" style={{ fontSize: '14px' }}>
                   check_circle
                 </span>
               )}

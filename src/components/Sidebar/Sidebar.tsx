@@ -12,9 +12,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onTabChange, activeTab = 'term
   const tabs = [
     { id: 'terminal', label: 'Terminal', icon: 'terminal' },
     { id: 'accounts', label: 'Accounts', icon: 'account_circle' },
-    { id: 'files', label: 'Files', icon: 'folder' },
     { id: 'auth', label: 'Auth Keys', icon: 'vpn_key' },
-    { id: 'settings', label: 'Settings', icon: 'settings' },
   ];
 
   return (

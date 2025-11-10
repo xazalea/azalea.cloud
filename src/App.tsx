@@ -248,22 +248,8 @@ function AppContent() {
         return <AccountManager />;
       case 'auth':
         return <AuthKeys />;
-      case 'files':
-        return (
-          <div style={{ padding: '24px', color: '#BABBB1' }}>
-            <h2>File Manager</h2>
-            <p>File management coming soon...</p>
-          </div>
-        );
-      case 'settings':
-        return (
-          <div style={{ padding: '24px', color: '#BABBB1' }}>
-            <h2>Settings</h2>
-            <p>Settings coming soon...</p>
-          </div>
-        );
       default:
-        return <Terminal />;
+        return <Terminal onCommand={undefined} />;
     }
   };
 
