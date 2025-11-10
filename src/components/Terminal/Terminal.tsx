@@ -7,6 +7,7 @@ import { useTheme } from '../../theme/theme';
 import { CloudShellService } from '../../services/cloudShellService';
 import { TerminalControls } from './TerminalControls';
 import { BackendInitializer } from '../../services/backendInitializer';
+import { autoAuthService } from '../../services/autoAuthService';
 
 interface TerminalProps {
   onCommand?: (command: string) => void;
@@ -117,6 +118,16 @@ export const Terminal: React.FC<TerminalProps> = ({
       : `\x1b[1;32mazalea@cloud\x1b[0m:\x1b[1;34m~\x1b[0m$ `;
     
     xterm.writeln('\x1b[1;36mWelcome to AzaleaCloud Terminal\x1b[0m');
+    
+    // Check authentication status and show it
+    autoAuthService.waitForAuth().then((authStatus) => {
+      if (authStatus.isAuthenticated) {
+        xterm.writeln('\x1b[1;32m✓ Automatically authenticated via metadata server\x1b[0m');
+      } else if (authStatus.isCloudEnvironment) {
+        xterm.writeln('\x1b[1;33m⚠ Authentication in progress...\x1b[0m');
+      }
+    });
+    
     xterm.writeln('Type \x1b[1;33mhelp\x1b[0m for available commands.\r\n');
 
     // Backend is always ready (browser-based)

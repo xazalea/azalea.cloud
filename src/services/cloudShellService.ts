@@ -1,9 +1,11 @@
 /**
  * Cloud Shell Service
- * Handles cloud shell operations and commands
+ * Handles cloud shell operations and commands with automatic metadata server authentication
+ * Similar to Google Cloud Shell's seamless authentication
  */
 
 import { gapiRequest } from '../../lib/api/gapiLoader';
+import { CloudMetadataService } from '../../lib/services/cloudMetadataService';
 
 export interface CloudShellSession {
   id: string;
@@ -19,6 +21,37 @@ export interface CommandResult {
 
 export class CloudShellService {
   private sessionId: string | null = null;
+  private metadataService: CloudMetadataService;
+  private isCloudEnvironment: boolean = false;
+
+  constructor() {
+    this.metadataService = new CloudMetadataService({
+      autoRefresh: true,
+      refreshBufferMinutes: 5,
+    });
+    // Initialize immediately and silently - don't wait for user
+    this.initializeCloudEnvironment().catch(() => {
+      // Silently fail if not in cloud environment
+    });
+  }
+
+  /**
+   * Initializes cloud environment and checks for metadata server
+   * This happens automatically in the background - users don't need to authenticate
+   */
+  private async initializeCloudEnvironment(): Promise<void> {
+    try {
+      this.isCloudEnvironment = await this.metadataService.isCloudEnvironment();
+      if (this.isCloudEnvironment) {
+        // Pre-fetch token to ensure it's ready - this is automatic authentication
+        await this.metadataService.getAccessToken();
+        console.log('✓ Cloud environment detected - automatically authenticated via metadata server');
+      }
+    } catch (error) {
+      // Silently handle - not in cloud environment
+      this.isCloudEnvironment = false;
+    }
+  }
 
   /**
    * Creates a new cloud shell session
@@ -41,6 +74,7 @@ export class CloudShellService {
 
   /**
    * Executes a command in the cloud shell
+   * Automatically uses metadata server authentication for gcloud commands
    */
   async executeCommand(command: string): Promise<CommandResult> {
     if (!this.sessionId) {
@@ -48,13 +82,47 @@ export class CloudShellService {
     }
 
     try {
-      // In a real implementation, this would send the command to your backend
-      // For now, we'll simulate command execution
+      // Check if this is a gcloud command and we're in a cloud environment
+      if (this.isCloudEnvironment && command.trim().startsWith('gcloud')) {
+        return await this.executeGcloudCommand(command);
+      }
+
+      // For other commands, use standard execution
       const result = await this.simulateCommand(command);
       return result;
     } catch (error) {
       console.error('Failed to execute command:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Executes a gcloud command with automatic metadata server authentication
+   */
+  private async executeGcloudCommand(command: string): Promise<CommandResult> {
+    try {
+      // Get access token from metadata server
+      const token = await this.metadataService.getAccessToken();
+      
+      // Parse gcloud command
+      const parts = command.trim().split(/\s+/);
+      const gcloudArgs = parts.slice(1); // Remove 'gcloud' from the command
+
+      // Execute with token
+      const result = await this.metadataService.executeGcloudCommand(gcloudArgs);
+      
+      return {
+        output: result.stdout,
+        exitCode: result.exitCode,
+        timestamp: Date.now(),
+      };
+    } catch (error) {
+      return {
+        output: `Error: ${error instanceof Error ? error.message : 'Unknown error'}\n` +
+                'Make sure you are running in a Google Cloud environment.',
+        exitCode: 1,
+        timestamp: Date.now(),
+      };
     }
   }
 
@@ -107,6 +175,29 @@ export class CloudShellService {
       // In a real implementation, this would call your backend API
       this.sessionId = null;
     }
+    // Clean up metadata service
+    this.metadataService.stop();
+  }
+
+  /**
+   * Gets the current access token (for debugging/inspection)
+   */
+  async getAccessToken(): Promise<string | null> {
+    if (!this.isCloudEnvironment) {
+      return null;
+    }
+    try {
+      return await this.metadataService.getAccessToken();
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Checks if running in cloud environment
+   */
+  isInCloudEnvironment(): boolean {
+    return this.isCloudEnvironment;
   }
 }
 
