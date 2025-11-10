@@ -31,32 +31,29 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
       try {
         setAuthStatus('checking');
         
-        // Check if we're in a cloud environment
-        const isCloud = await metadataServiceRef.current.isCloudEnvironment();
-        
-        if (!isCloud) {
-          setError('Not running in Google Cloud environment. Cloud Shell requires a Google Cloud VM or Cloud Shell instance.');
-          setAuthStatus('failed');
-          setLoading(false);
-          return;
-        }
-
-        setAuthStatus('authenticating');
-        
-        // Get access token from metadata server (automatic authentication)
-        const token = await metadataServiceRef.current.getAccessToken();
-        
-        if (!token) {
-          throw new Error('Failed to obtain access token from metadata server');
+        // Try to get token from metadata server if in GCP environment
+        // If not in GCP, we'll still load Cloud Shell - it will handle its own auth
+        let token: string | null = null;
+        try {
+          const isCloud = await metadataServiceRef.current.isCloudEnvironment();
+          if (isCloud) {
+            setAuthStatus('authenticating');
+            token = await metadataServiceRef.current.getAccessToken();
+            if (token) {
+              (window as any).azaleaCloudToken = token;
+              (window as any).azaleaCloudAuthenticated = true;
+              console.log('Authenticated via metadata server');
+            }
+          }
+        } catch (err) {
+          // Not in GCP environment - that's okay, Cloud Shell will handle auth
+          console.log('Not in GCP environment, Cloud Shell will handle authentication');
         }
 
         setAuthStatus('authenticated');
         
-        // Store token for Cloud Shell to use
-        (window as any).azaleaCloudToken = token;
-        (window as any).azaleaCloudAuthenticated = true;
-
-        // Load Cloud Shell scripts
+        // Load Cloud Shell scripts - works from anywhere
+        // Cloud Shell will handle its own authentication flow
         await loadCloudShellScripts();
         
         setLoading(false);
@@ -215,10 +212,10 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
                   cloud
                 </span>
                 <div style={{ fontSize: '18px', fontWeight: 600, color: theme.text, marginBottom: '8px' }}>
-                  Checking Cloud Environment...
+                  Initializing Azalea Cloud Shell...
                 </div>
                 <div style={{ fontSize: '14px', color: theme.textSecondary }}>
-                  Detecting Google Cloud metadata server
+                  Setting up automatic authentication
                 </div>
               </>
             )}
@@ -231,7 +228,7 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
                   Authenticating Automatically...
                 </div>
                 <div style={{ fontSize: '14px', color: theme.textSecondary }}>
-                  Fetching access token from metadata server
+                  Using metadata server authentication
                 </div>
               </>
             )}
@@ -241,10 +238,10 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
                   check_circle
                 </span>
                 <div style={{ fontSize: '18px', fontWeight: 600, color: theme.text, marginBottom: '8px' }}>
-                  Authenticated!
+                  Loading Azalea Cloud Shell...
                 </div>
                 <div style={{ fontSize: '14px', color: theme.textSecondary }}>
-                  Loading Azalea Cloud Shell...
+                  Cloud Shell will handle authentication automatically
                 </div>
               </>
             )}
@@ -284,16 +281,43 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
           </span>
           <div>
             <div style={{ fontSize: '24px', fontWeight: 600, color: theme.error, marginBottom: '12px' }}>
-              Cannot Load Cloud Shell
+              Failed to Load Cloud Shell
             </div>
             <div style={{ fontSize: '16px', color: theme.textSecondary, marginBottom: '24px' }}>
               {error}
             </div>
-            <div style={{ fontSize: '14px', color: theme.textSecondary }}>
-              Cloud Shell requires running in a Google Cloud environment (VM instance or Cloud Shell).
-              <br />
-              The metadata server is used for automatic authentication.
-            </div>
+            <button
+              onClick={() => {
+                setError(null);
+                setLoading(true);
+                setAuthStatus('checking');
+                // Retry initialization
+                const initializeCloudShell = async () => {
+                  try {
+                    await loadCloudShellScripts();
+                    setLoading(false);
+                    setAuthStatus('authenticated');
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Initialization failed');
+                    setLoading(false);
+                  }
+                };
+                initializeCloudShell();
+              }}
+              style={{
+                padding: '12px 24px',
+                backgroundColor: theme.accent,
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '16px',
+                fontWeight: 600,
+                marginTop: '16px',
+              }}
+            >
+              Retry
+            </button>
           </div>
         </div>
       )}
