@@ -16,26 +16,26 @@ export const ProviderSpecs: React.FC = () => {
   return (
     <div
       style={{
-        padding: '20px 24px',
+        padding: '32px 40px',
         backgroundColor: theme.surfaceVariant,
-        borderRadius: '16px',
+        borderRadius: '20px',
         border: `1px solid ${theme.border}`,
-        marginBottom: '24px',
+        marginBottom: '32px',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-        <span className="material-icons" style={{ fontSize: '20px', color: theme.accent }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+        <span className="material-icons" style={{ fontSize: '24px', color: theme.accent }}>
           speed
         </span>
-        <span style={{ fontSize: '16px', fontWeight: 600, color: theme.text }}>
+        <span style={{ fontSize: '20px', fontWeight: 600, color: theme.text }}>
           {provider.name} Specifications
         </span>
       </div>
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: '16px',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '24px',
         }}
       >
         {specs.cpu && (

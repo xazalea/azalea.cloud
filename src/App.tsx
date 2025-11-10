@@ -14,7 +14,6 @@ import { WebVMWithBackend } from './components/WebVM/WebVMWithBackend';
 import { SuperProvider } from './components/SuperProvider/SuperProvider';
 import { UltraProvider } from './components/UltraProvider/UltraProvider';
 import { DesktopViewer } from './components/DesktopViewer/DesktopViewer';
-import { LandingPage } from './components/LandingPage/LandingPage';
 import { ProgressIndicator, ProgressStep } from './components/ProgressIndicator/ProgressIndicator';
 import { NotificationSystem, useNotifications } from './components/Notifications/NotificationSystem';
 import { DesktopService } from './services/desktopService';
@@ -26,10 +25,6 @@ import { useProvider } from './context/ProviderContext';
 function AppContent() {
   const { currentProvider } = useProvider();
   const [activeTab, setActiveTab] = useState('terminal');
-  const [showLanding, setShowLanding] = useState(() => {
-    // Check if user has visited before
-    return !localStorage.getItem('azalea-visited');
-  });
   const [desktopLoading, setDesktopLoading] = useState(false);
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
   const [showProgress, setShowProgress] = useState(false);
@@ -41,7 +36,7 @@ function AppContent() {
   const [desktopUrl, setDesktopUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    // Initialize token refresh manager
+    // Initialize token refresh manager (non-blocking)
     const manager = new TokenRefreshManager(async (token) => {
       // Save token to database when updated
       try {
@@ -52,36 +47,52 @@ function AppContent() {
       }
     });
 
-    // Start token refresh (only if running in a Google Cloud environment)
-    // In a real implementation, you'd check if metadata server is available
+    // Start token refresh asynchronously (non-blocking)
+    // Don't wait for this to complete before rendering
     if (typeof window !== 'undefined') {
-      // For development, we'll skip the actual metadata server call
-      // In production, you'd check if metadata server is accessible
-      const checkMetadataServer = async () => {
-        try {
-          // Try to fetch from metadata server
-          const response = await fetch(
-            'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
-            {
-              headers: { 'Metadata-Flavor': 'Google' },
-              signal: AbortSignal.timeout(1000), // 1 second timeout
-            }
-          );
-          if (response.ok) {
-            await manager.start();
-            setTokenManager(manager);
-          }
-        } catch (error) {
-          // Metadata server not available (expected in local development)
-          console.log('Metadata server not available (running locally)');
+      // Use requestIdleCallback if available, otherwise setTimeout
+      const scheduleCheck = (callback: () => void) => {
+        if ('requestIdleCallback' in window) {
+          requestIdleCallback(callback, { timeout: 2000 });
+        } else {
+          setTimeout(callback, 100);
         }
       };
 
-      checkMetadataServer();
+      scheduleCheck(() => {
+        const checkMetadataServer = async () => {
+          try {
+            // Try to fetch from metadata server with short timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 500); // 500ms timeout
+            
+            const response = await fetch(
+              'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+              {
+                headers: { 'Metadata-Flavor': 'Google' },
+                signal: controller.signal,
+              }
+            );
+            clearTimeout(timeoutId);
+            
+            if (response.ok) {
+              await manager.start();
+              setTokenManager(manager);
+            }
+          } catch (error) {
+            // Metadata server not available (expected in local development)
+            // Silently fail - don't block UI
+          }
+        };
+
+        checkMetadataServer();
+      });
     }
 
-    // Start background worker for automated account management
-    startWorker();
+    // Start background worker asynchronously (non-blocking)
+    setTimeout(() => {
+      startWorker();
+    }, 0);
 
     return () => {
       manager.stop();
@@ -256,18 +267,6 @@ function AppContent() {
     }
   };
 
-  // Show landing page if not started
-  if (showLanding) {
-    return (
-      <LandingPage
-        onGetStarted={() => {
-          localStorage.setItem('azalea-visited', 'true');
-          setShowLanding(false);
-        }}
-      />
-    );
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#F0DAD5' }}>
       <NotificationSystem notifications={notifications} onRemove={removeNotification} />
@@ -293,8 +292,8 @@ function AppContent() {
             display: 'flex',
             flexDirection: 'column',
             backgroundColor: '#F0DAD5',
-            padding: '32px',
-            gap: '24px',
+            padding: '48px 64px',
+            gap: '32px',
           }}
         >
           {activeTab === 'terminal' && (
@@ -311,10 +310,10 @@ function AppContent() {
             style={{ 
               flex: 1, 
               minHeight: 0, 
-              padding: '0', 
+              padding: '32px', 
               display: 'flex', 
               overflow: 'hidden',
-              borderRadius: '16px',
+              borderRadius: '20px',
               backgroundColor: 'rgba(255, 255, 255, 0.05)',
             }}
           >

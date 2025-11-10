@@ -25,3 +25,11 @@ declare module 'xterm-addon-web-links' {
   }
 }
 
+// Extend Window interface for requestIdleCallback
+interface Window {
+  requestIdleCallback?: (
+    callback: (deadline: { didTimeout: boolean; timeRemaining: () => number }) => void,
+    options?: { timeout?: number }
+  ) => number;
+}
+

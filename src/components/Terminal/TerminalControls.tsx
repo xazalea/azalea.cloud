@@ -25,31 +25,31 @@ export const TerminalControls: React.FC<TerminalControlsProps> = ({
   return (
     <div
       style={{
-        padding: '12px 20px',
+        padding: '20px 32px',
         backgroundColor: theme.surfaceVariant,
         borderBottom: `1px solid ${theme.border}`,
-        borderRadius: '12px 12px 0 0',
+        borderRadius: '16px 16px 0 0',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'flex-end',
-        gap: '12px',
+        gap: '16px',
       }}
     >
       <button
         onClick={onDesktopClick}
         disabled={loading}
         style={{
-          padding: '10px 20px',
+          padding: '14px 28px',
           backgroundColor: loading ? theme.textSecondary : theme.accent,
           color: '#FFFFFF',
           border: 'none',
-          borderRadius: '8px',
+          borderRadius: '12px',
           cursor: loading ? 'wait' : 'pointer',
-          fontSize: '14px',
+          fontSize: '16px',
           fontWeight: 500,
           display: 'flex',
           alignItems: 'center',
-          gap: '8px',
+          gap: '12px',
           transition: 'all 0.2s ease',
           opacity: loading ? 0.7 : 1,
         }}

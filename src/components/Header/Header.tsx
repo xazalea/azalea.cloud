@@ -10,7 +10,7 @@ export const Header: React.FC = () => {
       style={{
         backgroundColor: theme.surface,
         borderBottom: `1px solid ${theme.border}`,
-        padding: '20px 32px',
+        padding: '24px 48px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -46,51 +46,17 @@ export const Header: React.FC = () => {
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <button
-          onClick={() => {
-            if (window.confirm('Return to landing page?')) {
-              localStorage.removeItem('azalea-visited');
-              window.location.reload();
-            }
-          }}
-          style={{
-            backgroundColor: 'transparent',
-            border: `1px solid ${theme.border}`,
-            borderRadius: '8px',
-            padding: '8px 16px',
-            cursor: 'pointer',
-            color: theme.textSecondary,
-            fontSize: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            transition: 'all 0.2s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = theme.surfaceVariant;
-            e.currentTarget.style.color = theme.text;
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-            e.currentTarget.style.color = theme.textSecondary;
-          }}
-        >
-          <span className="material-icons" style={{ fontSize: '16px' }}>
-            home
-          </span>
-          Home
-        </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
         <div
           style={{
-            fontSize: '12px',
+            fontSize: '14px',
             color: theme.textSecondary,
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
+            gap: '10px',
           }}
         >
-          <span className="material-icons" style={{ fontSize: '16px' }}>
+          <span className="material-icons" style={{ fontSize: '18px' }}>
             account_circle
           </span>
           azalea.compute@gmail.com

@@ -224,14 +224,14 @@ export const Terminal: React.FC<TerminalProps> = ({
           )}
           <div
             style={{
-              padding: '8px 16px',
+              padding: '16px 24px',
               backgroundColor: theme.surfaceVariant,
               borderBottom: `1px solid ${theme.border}`,
-              borderRadius: showDesktopButton ? '0' : '8px 8px 0 0',
+              borderRadius: showDesktopButton ? '0' : '12px 12px 0 0',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              fontSize: '12px',
+              gap: '12px',
+              fontSize: '14px',
               color: theme.textSecondary,
             }}
           >
@@ -249,7 +249,7 @@ export const Terminal: React.FC<TerminalProps> = ({
           width: '100%',
           height: '100%',
           minHeight: 0,
-          padding: compact ? '12px' : '24px',
+          padding: compact ? '16px' : '32px',
           overflow: 'hidden',
         }}
       />
