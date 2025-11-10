@@ -20,13 +20,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ onTabChange, activeTab = 'term
   return (
     <aside
       style={{
-        width: '240px',
+        width: '280px',
         backgroundColor: theme.surface,
         borderRight: `1px solid ${theme.border}`,
-        padding: '16px',
+        padding: '24px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '8px',
+        gap: '12px',
       }}
     >
       {tabs.map((tab) => {
@@ -37,16 +37,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ onTabChange, activeTab = 'term
             onClick={() => onTabChange?.(tab.id)}
             style={{
               width: '100%',
-              padding: '12px 16px',
+              padding: '16px 20px',
               backgroundColor: isActive ? theme.surfaceVariant : 'transparent',
               border: 'none',
-              borderRadius: '8px',
+              borderRadius: '12px',
               cursor: 'pointer',
               color: isActive ? theme.accent : theme.text,
               display: 'flex',
               alignItems: 'center',
-              gap: '12px',
-              fontSize: '14px',
+              gap: '16px',
+              fontSize: '16px',
               fontWeight: isActive ? 600 : 400,
               transition: 'all 0.2s ease',
               textAlign: 'left',

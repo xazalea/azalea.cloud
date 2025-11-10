@@ -16,6 +16,7 @@ interface TerminalProps {
   compact?: boolean;
   onDesktopClick?: () => void;
   showDesktopButton?: boolean;
+  desktopLoading?: boolean;
 }
 
 export const Terminal: React.FC<TerminalProps> = ({ 
@@ -25,6 +26,7 @@ export const Terminal: React.FC<TerminalProps> = ({
   compact = false,
   onDesktopClick,
   showDesktopButton = false,
+  desktopLoading = false,
 }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -214,7 +216,11 @@ export const Terminal: React.FC<TerminalProps> = ({
       {!compact && (
         <>
           {showDesktopButton && onDesktopClick && (
-            <TerminalControls onDesktopClick={onDesktopClick} showDesktop={showDesktopButton} />
+            <TerminalControls 
+              onDesktopClick={onDesktopClick} 
+              showDesktop={showDesktopButton}
+              loading={desktopLoading}
+            />
           )}
           <div
             style={{
@@ -243,7 +249,7 @@ export const Terminal: React.FC<TerminalProps> = ({
           width: '100%',
           height: '100%',
           minHeight: 0,
-          padding: compact ? '8px' : '16px',
+          padding: compact ? '12px' : '24px',
           overflow: 'hidden',
         }}
       />

@@ -6,6 +6,7 @@
 
 import { gapiRequest } from '../../lib/api/gapiLoader';
 import { CloudMetadataService } from '../../lib/services/cloudMetadataService';
+import { DatabaseCache } from './databaseCache';
 
 export interface CloudShellSession {
   id: string;
@@ -22,6 +23,7 @@ export interface CommandResult {
 export class CloudShellService {
   private sessionId: string | null = null;
   private metadataService: CloudMetadataService;
+  private databaseCache: DatabaseCache;
   private isCloudEnvironment: boolean = false;
 
   constructor() {
@@ -29,6 +31,7 @@ export class CloudShellService {
       autoRefresh: true,
       refreshBufferMinutes: 5,
     });
+    this.databaseCache = DatabaseCache.getInstance();
     // Initialize immediately and silently - don't wait for user
     this.initializeCloudEnvironment().catch(() => {
       // Silently fail if not in cloud environment
@@ -98,9 +101,20 @@ export class CloudShellService {
 
   /**
    * Executes a gcloud command with automatic metadata server authentication
+   * Uses database cache for command results to improve performance
    */
   private async executeGcloudCommand(command: string): Promise<CommandResult> {
     try {
+      // Check cache first for read-only commands
+      const cacheKey = `gcloud_${command}`;
+      if (this.isReadOnlyCommand(command)) {
+        const cached = await this.databaseCache.get<CommandResult>(cacheKey);
+        if (cached) {
+          console.log('Using cached command result');
+          return cached;
+        }
+      }
+
       // Get access token from metadata server
       const token = await this.metadataService.getAccessToken();
       
@@ -111,11 +125,18 @@ export class CloudShellService {
       // Execute with token
       const result = await this.metadataService.executeGcloudCommand(gcloudArgs);
       
-      return {
+      const commandResult: CommandResult = {
         output: result.stdout,
         exitCode: result.exitCode,
         timestamp: Date.now(),
       };
+
+      // Cache read-only command results
+      if (this.isReadOnlyCommand(command) && result.exitCode === 0) {
+        await this.databaseCache.set(cacheKey, commandResult, 5 * 60 * 1000); // 5 minutes
+      }
+      
+      return commandResult;
     } catch (error) {
       return {
         output: `Error: ${error instanceof Error ? error.message : 'Unknown error'}\n` +
@@ -124,6 +145,14 @@ export class CloudShellService {
         timestamp: Date.now(),
       };
     }
+  }
+
+  /**
+   * Checks if command is read-only (safe to cache)
+   */
+  private isReadOnlyCommand(command: string): boolean {
+    const readOnlyCommands = ['list', 'describe', 'get', 'show', 'status'];
+    return readOnlyCommands.some(cmd => command.includes(cmd));
   }
 
   /**

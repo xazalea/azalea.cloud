@@ -14,6 +14,9 @@ import { WebVMWithBackend } from './components/WebVM/WebVMWithBackend';
 import { SuperProvider } from './components/SuperProvider/SuperProvider';
 import { UltraProvider } from './components/UltraProvider/UltraProvider';
 import { DesktopViewer } from './components/DesktopViewer/DesktopViewer';
+import { LandingPage } from './components/LandingPage/LandingPage';
+import { ProgressIndicator, ProgressStep } from './components/ProgressIndicator/ProgressIndicator';
+import { NotificationSystem, useNotifications } from './components/Notifications/NotificationSystem';
 import { DesktopService } from './services/desktopService';
 import { TokenRefreshManager } from '../lib/auth/metadataAuth';
 import { AuthKeyService } from '../lib/auth/authKeyService';
@@ -23,6 +26,14 @@ import { useProvider } from './context/ProviderContext';
 function AppContent() {
   const { currentProvider } = useProvider();
   const [activeTab, setActiveTab] = useState('terminal');
+  const [showLanding, setShowLanding] = useState(() => {
+    // Check if user has visited before
+    return !localStorage.getItem('azalea-visited');
+  });
+  const [desktopLoading, setDesktopLoading] = useState(false);
+  const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
+  const [showProgress, setShowProgress] = useState(false);
+  const { notifications, showError, showSuccess, showInfo, removeNotification } = useNotifications();
   const [tokenManager, setTokenManager] = useState<TokenRefreshManager | null>(null);
   const authKeyServiceRef = React.useRef(new AuthKeyService());
   const desktopServiceRef = React.useRef(new DesktopService());
@@ -78,8 +89,45 @@ function AppContent() {
   }, []);
 
   const handleStartDesktop = async () => {
+    setDesktopLoading(true);
+    setShowProgress(true);
+    
+    // Initialize progress steps
+    const initialSteps: ProgressStep[] = [
+      { id: 'tunnel', label: 'Setting up tunnel', status: 'pending' },
+      { id: 'backend', label: 'Connecting to backend', status: 'pending' },
+      { id: 'desktop', label: 'Starting desktop container', status: 'pending' },
+      { id: 'complete', label: 'Opening desktop', status: 'pending' },
+    ];
+    setProgressSteps(initialSteps);
+
+    const updateStep = (stepId: string, status: ProgressStep['status'], message?: string) => {
+      setProgressSteps((prev) =>
+        prev.map((step) =>
+          step.id === stepId
+            ? { ...step, status, message }
+            : step.status === 'in-progress' && status !== 'in-progress'
+            ? { ...step, status: 'completed' }
+            : step
+        )
+      );
+    };
+
     try {
-      const session = await desktopServiceRef.current.startDesktop();
+      // Automatically set up tunnel and start desktop with progress callbacks
+      const session = await desktopServiceRef.current.startDesktop((step, message) => {
+        updateStep(step, 'in-progress', message);
+      });
+
+      // Mark all steps as completed
+      setProgressSteps((prev) =>
+        prev.map((step) => ({ ...step, status: 'completed' }))
+      );
+
+      updateStep('complete', 'in-progress', 'Opening desktop window...');
+      
+      // Small delay to show completion
+      await new Promise((resolve) => setTimeout(resolve, 500));
       
       // Open desktop in a new tab/window with fullscreen option
       const desktopWindow = window.open(
@@ -89,6 +137,8 @@ function AppContent() {
       );
       
       if (desktopWindow) {
+        updateStep('complete', 'completed', 'Desktop window opened');
+        
         // Try to request fullscreen after a short delay
         desktopWindow.addEventListener('load', () => {
           setTimeout(() => {
@@ -106,13 +156,41 @@ function AppContent() {
         // Store reference for cleanup
         setDesktopUrl(session.vncUrl);
         setDesktopOpen(true);
+        setDesktopLoading(false);
+        
+        // Hide progress after a short delay
+        setTimeout(() => {
+          setShowProgress(false);
+        }, 1500);
+        
+        showSuccess('Desktop Started', 'Desktop has been opened in a new window.');
       } else {
         // Popup blocked, show error
-        alert('Please allow popups for this site to open the desktop in a new window.');
+        updateStep('complete', 'error', 'Popup blocked');
+        setDesktopLoading(false);
+        setShowProgress(false);
+        showError(
+          'Popup Blocked',
+          'Please allow popups for this site to open the desktop in a new window. Check your browser settings.'
+        );
       }
     } catch (error) {
+      // Mark current step as error
+      const currentStep = progressSteps.find((s) => s.status === 'in-progress');
+      if (currentStep) {
+        updateStep(currentStep.id, 'error', error instanceof Error ? error.message : 'Unknown error');
+      }
+      
+      setDesktopLoading(false);
+      setShowProgress(false);
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      showError(
+        'Desktop Startup Failed',
+        `Failed to start desktop: ${errorMessage}\n\nPlease ensure:\n- Docker is running\n- VNC container image is available\n- Network connectivity is working`
+      );
+      
       console.error('Failed to start desktop:', error);
-      alert('Failed to start desktop. Please make sure Docker is running and the image is available.');
     }
   };
 
@@ -137,6 +215,7 @@ function AppContent() {
               onCommand={undefined}
               onDesktopClick={handleStartDesktop}
               showDesktopButton={true}
+              desktopLoading={desktopLoading}
             />
           );
         case 'azalea-sshx':
@@ -177,8 +256,33 @@ function AppContent() {
     }
   };
 
+  // Show landing page if not started
+  if (showLanding) {
+    return (
+      <LandingPage
+        onGetStarted={() => {
+          localStorage.setItem('azalea-visited', 'true');
+          setShowLanding(false);
+        }}
+      />
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#F0DAD5' }}>
+      <NotificationSystem notifications={notifications} onRemove={removeNotification} />
+      {showProgress && (
+        <ProgressIndicator
+          steps={progressSteps}
+          title="Starting Desktop"
+          onClose={() => {
+            if (window.confirm('Cancel desktop startup?')) {
+              setShowProgress(false);
+              setDesktopLoading(false);
+            }
+          }}
+        />
+      )}
       <Header />
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
@@ -189,19 +293,31 @@ function AppContent() {
             display: 'flex',
             flexDirection: 'column',
             backgroundColor: '#F0DAD5',
+            padding: '32px',
+            gap: '24px',
           }}
         >
           {activeTab === 'terminal' && (
             <>
-              <div style={{ padding: '16px 16px 0 16px' }}>
+              <div style={{ padding: '0' }}>
                 <ProviderSelector />
               </div>
-              <div style={{ padding: '0 16px' }}>
+              <div style={{ padding: '0' }}>
                 <ProviderSpecs />
               </div>
             </>
           )}
-          <div style={{ flex: 1, minHeight: 0, padding: activeTab === 'terminal' ? '16px' : '0', display: 'flex', overflow: 'hidden' }}>
+          <div 
+            style={{ 
+              flex: 1, 
+              minHeight: 0, 
+              padding: '0', 
+              display: 'flex', 
+              overflow: 'hidden',
+              borderRadius: '16px',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            }}
+          >
             {renderContent()}
           </div>
         </main>

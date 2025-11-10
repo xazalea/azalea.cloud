@@ -14,10 +14,10 @@ export const ProviderSelector: React.FC = () => {
   return (
     <div
       style={{
-        padding: '16px',
+        padding: '24px',
         backgroundColor: theme.surfaceVariant,
-        borderRadius: '8px',
-        marginBottom: '16px',
+        borderRadius: '16px',
+        marginBottom: '24px',
         border: `1px solid ${theme.border}`,
       }}
     >
