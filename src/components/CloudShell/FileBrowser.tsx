@@ -65,15 +65,15 @@ export const FileBrowser: React.FC = () => {
             }
           }}
           style={{
-            padding: '6px 12px',
-            paddingLeft: `${12 + depth * 16}px`,
+            padding: '12px 16px',
+            paddingLeft: `${16 + depth * 20}px`,
             backgroundColor: isSelected ? theme.accent + '20' : 'transparent',
             color: isSelected ? theme.accent : theme.text,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            fontSize: '13px',
+            gap: '12px',
+            fontSize: '15px',
             transition: 'background-color 0.1s',
           }}
           onMouseEnter={(e) => {
@@ -87,7 +87,7 @@ export const FileBrowser: React.FC = () => {
             }
           }}
         >
-          <span className="material-icons" style={{ fontSize: '16px' }}>
+          <span className="material-icons" style={{ fontSize: '20px' }}>
             {node.type === 'directory'
               ? isExpanded
                 ? 'folder_open'
@@ -117,22 +117,22 @@ export const FileBrowser: React.FC = () => {
     >
       <div
         style={{
-          padding: '12px 16px',
+          padding: '16px 24px',
           borderBottom: `1px solid ${theme.border}`,
-          fontSize: '12px',
+          fontSize: '16px',
           fontWeight: 600,
           color: theme.text,
           display: 'flex',
           alignItems: 'center',
-          gap: '8px',
+          gap: '12px',
         }}
       >
-        <span className="material-icons" style={{ fontSize: '16px' }}>
+        <span className="material-icons" style={{ fontSize: '20px' }}>
           folder
         </span>
         Files
       </div>
-      <div style={{ flex: 1, overflow: 'auto', padding: '8px 0' }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: '12px 0' }}>
         {mockFiles.map((file) => renderFile(file))}
       </div>
     </div>

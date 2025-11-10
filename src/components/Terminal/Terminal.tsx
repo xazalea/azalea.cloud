@@ -39,10 +39,10 @@ export const Terminal: React.FC<TerminalProps> = ({
     // Initialize xterm with better settings
     const xterm = new XTerm({
       cursorBlink: true,
-      fontSize: 13,
+      fontSize: 16,
       fontFamily: '"Fira Code", "Roboto Mono", "Courier New", monospace',
       fontWeight: 400,
-      lineHeight: 1.4,
+      lineHeight: 1.6,
       letterSpacing: 0.5,
       theme: {
         background: theme.surface,

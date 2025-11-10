@@ -41,16 +41,16 @@ export const CodeEditor: React.FC = () => {
       {/* Editor header */}
       <div
         style={{
-          padding: '8px 16px',
+          padding: '16px 24px',
           backgroundColor: theme.surfaceVariant,
           borderBottom: `1px solid ${theme.border}`,
           display: 'flex',
           alignItems: 'center',
-          gap: '12px',
-          fontSize: '12px',
+          gap: '16px',
+          fontSize: '16px',
         }}
       >
-        <span className="material-icons" style={{ fontSize: '16px', color: theme.accent }}>
+        <span className="material-icons" style={{ fontSize: '20px', color: theme.accent }}>
           code
         </span>
         <input
@@ -61,12 +61,12 @@ export const CodeEditor: React.FC = () => {
             backgroundColor: 'transparent',
             border: 'none',
             color: theme.text,
-            fontSize: '12px',
+            fontSize: '16px',
             fontWeight: 500,
-            padding: '2px 8px',
-            borderRadius: '4px',
+            padding: '8px 12px',
+            borderRadius: '6px',
             flex: 1,
-            maxWidth: '200px',
+            maxWidth: '300px',
           }}
           onFocus={(e) => {
             e.target.style.backgroundColor = theme.surface;
@@ -88,13 +88,14 @@ export const CodeEditor: React.FC = () => {
             URL.revokeObjectURL(url);
           }}
           style={{
-            padding: '4px 8px',
+            padding: '10px 20px',
             backgroundColor: theme.accent,
             color: '#FFFFFF',
             border: 'none',
-            borderRadius: '4px',
+            borderRadius: '6px',
             cursor: 'pointer',
-            fontSize: '11px',
+            fontSize: '14px',
+            fontWeight: 500,
           }}
         >
           Save
@@ -110,14 +111,14 @@ export const CodeEditor: React.FC = () => {
         style={{
           flex: 1,
           width: '100%',
-          padding: '16px',
+          padding: '24px',
           backgroundColor: theme.surface,
           color: theme.text,
           border: 'none',
           outline: 'none',
           fontFamily: '"Fira Code", "Courier New", monospace',
-          fontSize: '14px',
-          lineHeight: '1.6',
+          fontSize: '16px',
+          lineHeight: '1.8',
           resize: 'none',
           whiteSpace: 'pre',
           overflow: 'auto',

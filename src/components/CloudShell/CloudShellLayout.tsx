@@ -32,8 +32,8 @@ export const CloudShellLayout: React.FC<CloudShellLayoutProps> = ({
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '4px',
-          padding: '8px 12px',
+          gap: '12px',
+          padding: '16px 24px',
           backgroundColor: theme.surfaceVariant,
           borderBottom: `1px solid ${theme.border}`,
         }}
@@ -41,20 +41,21 @@ export const CloudShellLayout: React.FC<CloudShellLayoutProps> = ({
         <button
           onClick={() => setShowFiles(!showFiles)}
           style={{
-            padding: '4px 10px',
+            padding: '12px 20px',
             backgroundColor: showFiles ? theme.accent : 'transparent',
             color: showFiles ? '#FFFFFF' : theme.text,
             border: 'none',
-            borderRadius: '4px',
+            borderRadius: '8px',
             cursor: 'pointer',
-            fontSize: '11px',
+            fontSize: '16px',
             fontWeight: 500,
             display: 'flex',
             alignItems: 'center',
-            gap: '4px',
+            gap: '8px',
+            transition: 'all 0.2s ease',
           }}
         >
-          <span className="material-icons" style={{ fontSize: '14px' }}>
+          <span className="material-icons" style={{ fontSize: '20px' }}>
             folder
           </span>
           Files
@@ -62,20 +63,21 @@ export const CloudShellLayout: React.FC<CloudShellLayoutProps> = ({
         <button
           onClick={() => setShowEditor(!showEditor)}
           style={{
-            padding: '4px 10px',
+            padding: '12px 20px',
             backgroundColor: showEditor ? theme.accent : 'transparent',
             color: showEditor ? '#FFFFFF' : theme.text,
             border: 'none',
-            borderRadius: '4px',
+            borderRadius: '8px',
             cursor: 'pointer',
-            fontSize: '11px',
+            fontSize: '16px',
             fontWeight: 500,
             display: 'flex',
             alignItems: 'center',
-            gap: '4px',
+            gap: '8px',
+            transition: 'all 0.2s ease',
           }}
         >
-          <span className="material-icons" style={{ fontSize: '14px' }}>
+          <span className="material-icons" style={{ fontSize: '20px' }}>
             code
           </span>
           Editor
@@ -86,23 +88,24 @@ export const CloudShellLayout: React.FC<CloudShellLayoutProps> = ({
             onClick={onDesktopClick}
             disabled={desktopLoading}
             style={{
-              padding: '4px 10px',
+              padding: '12px 24px',
               backgroundColor: desktopLoading ? theme.textSecondary : theme.accent,
               color: '#FFFFFF',
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: '8px',
               cursor: desktopLoading ? 'wait' : 'pointer',
-              fontSize: '11px',
-              fontWeight: 500,
+              fontSize: '16px',
+              fontWeight: 600,
               display: 'flex',
               alignItems: 'center',
-              gap: '4px',
+              gap: '8px',
+              transition: 'all 0.2s ease',
             }}
           >
-            <span className="material-icons" style={{ fontSize: '14px' }}>
-              desktop_windows
+            <span className="material-icons" style={{ fontSize: '20px' }}>
+              {desktopLoading ? 'refresh' : 'desktop_windows'}
             </span>
-            Desktop
+            {desktopLoading ? 'Starting...' : 'Desktop'}
           </button>
         )}
       </div>
@@ -113,7 +116,7 @@ export const CloudShellLayout: React.FC<CloudShellLayoutProps> = ({
         {showFiles && (
           <div
             style={{
-              width: '220px',
+              width: '300px',
               backgroundColor: theme.surfaceVariant,
               borderRight: `1px solid ${theme.border}`,
               overflow: 'auto',
@@ -128,7 +131,7 @@ export const CloudShellLayout: React.FC<CloudShellLayoutProps> = ({
           {showEditor && (
             <div
               style={{
-                height: '250px',
+                height: '400px',
                 display: 'flex',
                 flexDirection: 'column',
                 borderBottom: `1px solid ${theme.border}`,
@@ -142,7 +145,7 @@ export const CloudShellLayout: React.FC<CloudShellLayoutProps> = ({
           <div
             style={{
               flex: 1,
-              minHeight: '200px',
+              minHeight: '400px',
               display: 'flex',
               flexDirection: 'column',
             }}

@@ -67,7 +67,8 @@ async function startDesktop() {
       }
       
       const vercelUrl = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_VERCEL_URL || 'https://azalea-cloud.vercel.app';
-      const vncUrl = `${vercelUrl}/api/proxy?port=8080&path=/vnc.html`;
+      // Use full URL with proper encoding for VNC
+      const vncUrl = `${vercelUrl}/api/proxy?port=8080&path=${encodeURIComponent('/vnc.html')}`;
       
       return {
         success: true,
@@ -100,8 +101,8 @@ async function startDesktop() {
       activeTunnels.set(id, daemon);
       console.log(`Started tunnel daemon for container ${id}`);
       
-      // Return Vercel proxy URL instead of localhost
-      const vncUrl = `${vercelUrl}/api/proxy?port=8080&path=/vnc.html`;
+      // Return Vercel proxy URL instead of localhost with proper encoding
+      const vncUrl = `${vercelUrl}/api/proxy?port=8080&path=${encodeURIComponent('/vnc.html')}`;
       
       return {
         success: true,

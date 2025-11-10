@@ -16,7 +16,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const port = req.query.port as string;
-  const targetPath = (req.query.path as string) || (req.url?.includes('?') ? req.url.split('?')[0].replace('/api/proxy', '') : '/') || '/';
+  let targetPath = (req.query.path as string) || '/';
+  
+  // Decode the path if it was encoded
+  try {
+    targetPath = decodeURIComponent(targetPath);
+  } catch (e) {
+    // If decoding fails, use as-is
+  }
 
   if (!port) {
     return res.status(400).json({ error: 'Port parameter required' });

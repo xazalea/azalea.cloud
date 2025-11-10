@@ -42,9 +42,9 @@ export class DesktopService {
   private transformVncUrl(url: string, port: number): string {
     // If URL contains localhost, use Vercel proxy
     if (url.includes('localhost') || url.includes('127.0.0.1')) {
-      // Use Vercel proxy format: /api/proxy?port=8080&path=/vnc.html
+      // Use Vercel proxy format with proper encoding
       const baseUrl = window.location.origin;
-      return `${baseUrl}/api/proxy?port=${port}&path=/vnc.html`;
+      return `${baseUrl}/api/proxy?port=${port}&path=${encodeURIComponent('/vnc.html')}`;
     }
     // If it's already a tunnel URL, return as-is
     return url;
