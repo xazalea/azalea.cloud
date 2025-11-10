@@ -67,21 +67,28 @@ export default async function handler(
       // Try metadata server (if running in GCP)
       // Use AbortController for timeout compatibility
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1000);
+      let timeoutId: NodeJS.Timeout | null = null;
       
-      const metadataResponse = await fetch(
-        'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
-        {
-          headers: { 'Metadata-Flavor': 'Google' },
-          signal: controller.signal,
+      try {
+        timeoutId = setTimeout(() => controller.abort(), 1000);
+        
+        const metadataResponse = await fetch(
+          'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+          {
+            headers: { 'Metadata-Flavor': 'Google' },
+            signal: controller.signal,
+          }
+        );
+
+        if (timeoutId) clearTimeout(timeoutId);
+
+        if (metadataResponse.ok) {
+          const data = await metadataResponse.json();
+          accessToken = data.access_token;
         }
-      );
-
-      clearTimeout(timeoutId);
-
-      if (metadataResponse.ok) {
-        const data = await metadataResponse.json();
-        accessToken = data.access_token;
+      } catch (fetchError) {
+        if (timeoutId) clearTimeout(timeoutId);
+        // Not in GCP - that's okay, expected
       }
     } catch (err) {
       // Not in GCP - that's okay, expected
@@ -114,13 +121,22 @@ export default async function handler(
     }
 
     // Forward the request
-    const proxyResponse = await fetch(url.toString(), {
-      method: req.method,
-      headers: proxyHeaders,
-      body: req.method !== 'GET' && req.method !== 'HEAD' 
-        ? (typeof req.body === 'string' ? req.body : JSON.stringify(req.body))
-        : undefined,
-    });
+    let proxyResponse: Response;
+    try {
+      proxyResponse = await fetch(url.toString(), {
+        method: req.method,
+        headers: proxyHeaders,
+        body: req.method !== 'GET' && req.method !== 'HEAD' 
+          ? (typeof req.body === 'string' ? req.body : JSON.stringify(req.body))
+          : undefined,
+      });
+    } catch (fetchError) {
+      console.error('Failed to fetch from Cloud Shell:', fetchError);
+      return res.status(502).json({
+        error: 'Failed to connect to Cloud Shell',
+        message: fetchError instanceof Error ? fetchError.message : 'Unknown error',
+      });
+    }
 
     // Get response data - try JSON first, fallback to text
     const contentType = proxyResponse.headers.get('content-type') || '';
@@ -136,7 +152,14 @@ export default async function handler(
       }
     } catch (err) {
       // If parsing fails, get as text
-      data = await proxyResponse.text();
+      try {
+        data = await proxyResponse.text();
+      } catch (textError) {
+        console.error('Failed to read response:', textError);
+        return res.status(502).json({
+          error: 'Failed to read response from Cloud Shell',
+        });
+      }
     }
     
     // Forward response headers (except CORS and security headers)
@@ -152,12 +175,15 @@ export default async function handler(
       res.setHeader('Content-Type', 'application/json');
     }
 
-    res.status(proxyResponse.status).send(isJson ? JSON.stringify(data) : data);
+    return res.status(proxyResponse.status).send(isJson ? JSON.stringify(data) : data);
   } catch (error) {
     console.error('Proxy error:', error);
-    res.status(500).json({
-      error: error instanceof Error ? error.message : 'Proxy request failed',
-    });
+    // Make sure we haven't already sent a response
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: error instanceof Error ? error.message : 'Proxy request failed',
+      });
+    }
   }
 }
 

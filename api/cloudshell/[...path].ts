@@ -30,21 +30,28 @@ export default async function handler(
       // Try metadata server (if running in GCP)
       // Use AbortController for timeout compatibility
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1000);
+      let timeoutId: NodeJS.Timeout | null = null;
       
-      const metadataResponse = await fetch(
-        'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
-        {
-          headers: { 'Metadata-Flavor': 'Google' },
-          signal: controller.signal,
+      try {
+        timeoutId = setTimeout(() => controller.abort(), 1000);
+        
+        const metadataResponse = await fetch(
+          'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+          {
+            headers: { 'Metadata-Flavor': 'Google' },
+            signal: controller.signal,
+          }
+        );
+
+        if (timeoutId) clearTimeout(timeoutId);
+
+        if (metadataResponse.ok) {
+          const data = await metadataResponse.json();
+          accessToken = data.access_token;
         }
-      );
-
-      clearTimeout(timeoutId);
-
-      if (metadataResponse.ok) {
-        const data = await metadataResponse.json();
-        accessToken = data.access_token;
+      } catch (fetchError) {
+        if (timeoutId) clearTimeout(timeoutId);
+        // Not in GCP - that's okay, expected
       }
     } catch (err) {
       // Not in GCP - that's okay, expected
@@ -67,30 +74,53 @@ export default async function handler(
     });
 
     // Forward the request to Cloud Shell
-    const proxyResponse = await fetch(url.toString(), {
-      method: req.method,
-      headers: {
-        'Content-Type': req.headers['content-type'] || 'application/json',
-        ...(accessToken && { 'Authorization': `Bearer ${accessToken}` }),
-        'User-Agent': req.headers['user-agent'] || 'AzaleaCloud/1.0',
-        // Forward other important headers
-        ...(req.headers['cookie'] && { 'Cookie': req.headers['cookie'] }),
-        ...(req.headers['referer'] && { 'Referer': req.headers['referer'] }),
-      },
-      body: req.method !== 'GET' && req.method !== 'HEAD' 
-        ? (typeof req.body === 'string' ? req.body : JSON.stringify(req.body))
-        : undefined,
-    });
+    let proxyResponse: Response;
+    try {
+      proxyResponse = await fetch(url.toString(), {
+        method: req.method,
+        headers: {
+          'Content-Type': req.headers['content-type'] || 'application/json',
+          ...(accessToken && { 'Authorization': `Bearer ${accessToken}` }),
+          'User-Agent': req.headers['user-agent'] || 'AzaleaCloud/1.0',
+          // Forward other important headers
+          ...(req.headers['cookie'] && { 'Cookie': req.headers['cookie'] }),
+          ...(req.headers['referer'] && { 'Referer': req.headers['referer'] }),
+        },
+        body: req.method !== 'GET' && req.method !== 'HEAD' 
+          ? (typeof req.body === 'string' ? req.body : JSON.stringify(req.body))
+          : undefined,
+      });
+    } catch (fetchError) {
+      console.error('Failed to fetch from Cloud Shell:', fetchError);
+      return res.status(502).json({
+        error: 'Failed to connect to Cloud Shell',
+        message: fetchError instanceof Error ? fetchError.message : 'Unknown error',
+      });
+    }
 
     // Get response data
     const contentType = proxyResponse.headers.get('content-type') || '';
     const isJson = contentType.includes('application/json');
-    const data = isJson ? await proxyResponse.json() : await proxyResponse.text();
+    let data: any;
+    
+    try {
+      data = isJson ? await proxyResponse.json() : await proxyResponse.text();
+    } catch (err) {
+      // If parsing fails, try to get as text
+      try {
+        data = await proxyResponse.text();
+      } catch (textError) {
+        console.error('Failed to read response:', textError);
+        return res.status(502).json({
+          error: 'Failed to read response from Cloud Shell',
+        });
+      }
+    }
     
     // Forward response headers (except CORS and security headers)
     proxyResponse.headers.forEach((value, key) => {
       const lowerKey = key.toLowerCase();
-      if (!['access-control-allow-origin', 'x-frame-options', 'content-security-policy', 'content-encoding'].includes(lowerKey)) {
+      if (!['access-control-allow-origin', 'x-frame-options', 'content-security-policy', 'content-encoding', 'transfer-encoding'].includes(lowerKey)) {
         res.setHeader(key, value);
       }
     });
@@ -100,12 +130,15 @@ export default async function handler(
       res.setHeader('Content-Type', 'application/json');
     }
 
-    res.status(proxyResponse.status).send(isJson ? JSON.stringify(data) : data);
+    return res.status(proxyResponse.status).send(isJson ? JSON.stringify(data) : data);
   } catch (error) {
     console.error('Cloud Shell proxy error:', error);
-    res.status(500).json({
-      error: error instanceof Error ? error.message : 'Proxy request failed',
-    });
+    // Make sure we haven't already sent a response
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: error instanceof Error ? error.message : 'Proxy request failed',
+      });
+    }
   }
 }
 

@@ -31,21 +31,29 @@ export default async function handler(
     try {
       // Use AbortController for timeout compatibility
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1000);
+      let timeoutId: NodeJS.Timeout | null = null;
       
-      const metadataResponse = await fetch(
-        'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
-        {
-          headers: { 'Metadata-Flavor': 'Google' },
-          signal: controller.signal,
+      try {
+        timeoutId = setTimeout(() => controller.abort(), 1000);
+        
+        const metadataResponse = await fetch(
+          'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+          {
+            headers: { 'Metadata-Flavor': 'Google' },
+            signal: controller.signal,
+          }
+        );
+
+        if (timeoutId) clearTimeout(timeoutId);
+
+        if (metadataResponse.ok) {
+          const data = await metadataResponse.json();
+          token = data.access_token;
         }
-      );
-
-      clearTimeout(timeoutId);
-
-      if (metadataResponse.ok) {
-        const data = await metadataResponse.json();
-        token = data.access_token;
+      } catch (fetchError) {
+        if (timeoutId) clearTimeout(timeoutId);
+        // Not in GCP environment - that's okay, expected
+        // This will fail when not in GCP, and that's fine
       }
     } catch (err) {
       // Not in GCP environment - that's okay, expected
@@ -55,21 +63,22 @@ export default async function handler(
     // If no token from metadata server, return null
     // Cloud Shell will handle its own authentication
     if (!token) {
-      res.status(200).json({
+      return res.status(200).json({
         token: null,
         message: 'No token available - Cloud Shell will handle authentication',
       });
-      return;
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       token,
       expires_in: 3600,
       token_type: 'Bearer',
     });
   } catch (error) {
     console.error('Error getting token:', error);
-    res.status(500).json({
+    return res.status(200).json({
+      token: null,
+      message: 'No token available - Cloud Shell will handle authentication',
       error: error instanceof Error ? error.message : 'Failed to get token',
     });
   }
