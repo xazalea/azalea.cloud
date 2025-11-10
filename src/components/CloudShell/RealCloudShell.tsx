@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTheme } from '../../theme/theme';
-import { CloudMetadataService } from '../../lib/services/cloudMetadataService';
+import { CloudMetadataService } from '../../../lib/services/cloudMetadataService';
 
 interface RealCloudShellProps {
   onDesktopClick?: () => void;
