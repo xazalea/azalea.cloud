@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTheme } from '../../theme/theme';
-import { CloudMetadataService } from '../../../lib/services/cloudMetadataService';
+import { CloudShellAuthInterceptor } from '../../services/cloudShellAuthInterceptor';
 
 interface RealCloudShellProps {
   onDesktopClick?: () => void;
@@ -10,7 +10,7 @@ interface RealCloudShellProps {
 /**
  * Real Google Cloud Shell Component
  * Uses the actual Cloud Shell scripts and rebrands to Azalea
- * Handles authentication automatically in the background
+ * Automatically intercepts Google sign-in and authenticates in the background
  */
 export const RealCloudShell: React.FC<RealCloudShellProps> = ({
   onDesktopClick,
@@ -21,40 +21,29 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [authStatus, setAuthStatus] = useState<'checking' | 'authenticating' | 'authenticated' | 'failed'>('checking');
-  const metadataServiceRef = useRef(new CloudMetadataService({
-    autoRefresh: true,
-    refreshBufferMinutes: 5,
-  }));
+  const authInterceptorRef = useRef(new CloudShellAuthInterceptor());
 
   useEffect(() => {
     const initializeCloudShell = async () => {
       try {
         setAuthStatus('checking');
         
-        // Try to get token from metadata server if in GCP environment
-        // If not in GCP, we'll still load Cloud Shell - it will handle its own auth
-        let token: string | null = null;
-        try {
-          const isCloud = await metadataServiceRef.current.isCloudEnvironment();
-          if (isCloud) {
-            setAuthStatus('authenticating');
-            token = await metadataServiceRef.current.getAccessToken();
-            if (token) {
-              (window as any).azaleaCloudToken = token;
-              (window as any).azaleaCloudAuthenticated = true;
-              console.log('Authenticated via metadata server');
-            }
-          }
-        } catch (err) {
-          // Not in GCP environment - that's okay, Cloud Shell will handle auth
-          console.log('Not in GCP environment, Cloud Shell will handle authentication');
-        }
+        // Start authentication interceptor BEFORE loading Cloud Shell
+        // This will intercept Google's sign-in flow and auto-authenticate
+        setAuthStatus('authenticating');
+        await authInterceptorRef.current.startInterception();
+        console.log('Authentication interceptor started - will auto-authenticate Cloud Shell');
 
         setAuthStatus('authenticated');
         
-        // Load Cloud Shell scripts - works from anywhere
-        // Cloud Shell will handle its own authentication flow
+        // Load Cloud Shell scripts
+        // The interceptor will automatically handle authentication
         await loadCloudShellScripts();
+        
+        // Apply Azalea branding after Cloud Shell loads
+        setTimeout(() => {
+          applyAzaleaBranding();
+        }, 2000);
         
         setLoading(false);
       } catch (err) {
@@ -67,6 +56,69 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
 
     initializeCloudShell();
   }, []);
+
+  /**
+   * Applies Azalea branding to Cloud Shell UI
+   */
+  const applyAzaleaBranding = () => {
+    // Inject custom CSS for rebranding
+    const style = document.createElement('style');
+    style.id = 'azalea-cloudshell-branding';
+    style.textContent = `
+      /* Rebrand Cloud Shell to Azalea */
+      .csh-app-header,
+      .csh-app-title,
+      [class*="header"],
+      [class*="title"] {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+      }
+      
+      /* Hide Google branding where possible */
+      [class*="google"],
+      [class*="gcp"] {
+        opacity: 0.8;
+      }
+      
+      /* Azalea accent colors */
+      .csh-app [class*="primary"],
+      .csh-app [class*="accent"] {
+        color: ${theme.accent} !important;
+      }
+      
+      /* Custom Azalea styling */
+      .azalea-brand {
+        display: inline-block;
+        font-weight: 600;
+        color: ${theme.accent};
+      }
+    `;
+    
+    if (!document.getElementById('azalea-cloudshell-branding')) {
+      document.head.appendChild(style);
+    }
+
+    // Update page title
+    document.title = 'Azalea Cloud Shell';
+
+    // Try to update any visible branding text
+    const observer = new MutationObserver(() => {
+      // Look for Google/Cloud Shell branding and replace with Azalea
+      const elements = document.querySelectorAll('[class*="title"], [class*="brand"], [class*="header"]');
+      elements.forEach((el) => {
+        if (el.textContent?.includes('Google') || el.textContent?.includes('Cloud Shell')) {
+          el.textContent = el.textContent
+            .replace(/Google Cloud Shell/g, 'Azalea Cloud Shell')
+            .replace(/Google/g, 'Azalea');
+        }
+      });
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+  };
 
   const loadCloudShellScripts = async (): Promise<void> => {
     return new Promise((resolve, reject) => {
