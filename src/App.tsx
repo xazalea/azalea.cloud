@@ -80,8 +80,36 @@ function AppContent() {
   const handleStartDesktop = async () => {
     try {
       const session = await desktopServiceRef.current.startDesktop();
-      setDesktopUrl(session.vncUrl);
-      setDesktopOpen(true);
+      
+      // Open desktop in a new tab/window with fullscreen option
+      const desktopWindow = window.open(
+        session.vncUrl,
+        'azalea-desktop',
+        'width=1280,height=720,resizable=yes,scrollbars=yes,status=yes'
+      );
+      
+      if (desktopWindow) {
+        // Try to request fullscreen after a short delay
+        desktopWindow.addEventListener('load', () => {
+          setTimeout(() => {
+            try {
+              if (desktopWindow.document.documentElement.requestFullscreen) {
+                desktopWindow.document.documentElement.requestFullscreen();
+              }
+            } catch (e) {
+              // Fullscreen request failed, but window is open
+              console.log('Fullscreen not available, but desktop window is open');
+            }
+          }, 1000);
+        });
+        
+        // Store reference for cleanup
+        setDesktopUrl(session.vncUrl);
+        setDesktopOpen(true);
+      } else {
+        // Popup blocked, show error
+        alert('Please allow popups for this site to open the desktop in a new window.');
+      }
     } catch (error) {
       console.error('Failed to start desktop:', error);
       alert('Failed to start desktop. Please make sure Docker is running and the image is available.');

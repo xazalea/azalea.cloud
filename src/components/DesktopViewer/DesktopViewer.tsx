@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTheme } from '../../theme/theme';
 
 interface DesktopViewerProps {
@@ -8,44 +8,68 @@ interface DesktopViewerProps {
 
 /**
  * Desktop Viewer Component
- * Displays VNC desktop using iframe
+ * Opens VNC desktop in a new window/tab with fullscreen support
  */
 export const DesktopViewer: React.FC<DesktopViewerProps> = ({ vncUrl, onClose }) => {
   const { theme } = useTheme();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [loading, setLoading] = useState(true);
+  const [desktopWindow, setDesktopWindow] = useState<Window | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    // Open desktop in a new window
+    const openDesktop = () => {
+      try {
+        const newWindow = window.open(
+          vncUrl,
+          'azalea-desktop',
+          'width=1280,height=720,resizable=yes,scrollbars=yes,status=yes,location=yes'
+        );
 
-    // Create iframe for VNC desktop
-    const iframe = document.createElement('iframe');
-    iframe.src = vncUrl;
-    iframe.style.width = '100%';
-    iframe.style.height = '100%';
-    iframe.style.border = 'none';
-    iframe.allow = 'clipboard-read; clipboard-write; fullscreen';
-    iframe.title = 'AzaleaCloud Desktop';
-    
-    iframe.onload = () => {
-      setLoading(false);
-      setError(null);
-    };
-    
-    iframe.onerror = () => {
-      setLoading(false);
-      setError('Failed to load desktop. Make sure the container is running.');
-    };
+        if (!newWindow) {
+          setError('Failed to open desktop window. Please allow popups for this site.');
+          return;
+        }
 
-    containerRef.current.appendChild(iframe);
+        setDesktopWindow(newWindow);
 
-    return () => {
-      if (containerRef.current && iframe.parentNode) {
-        containerRef.current.removeChild(iframe);
+        // Try to enter fullscreen after window loads
+        newWindow.addEventListener('load', () => {
+          setTimeout(() => {
+            try {
+              const doc = newWindow.document;
+              if (doc.documentElement.requestFullscreen) {
+                doc.documentElement.requestFullscreen().catch(() => {
+                  // Fullscreen failed, but window is open
+                  console.log('Fullscreen not available');
+                });
+              }
+            } catch (e) {
+              console.log('Fullscreen request failed:', e);
+            }
+          }, 1000);
+        });
+
+        // Monitor window close
+        const checkClosed = setInterval(() => {
+          if (newWindow.closed) {
+            clearInterval(checkClosed);
+            setDesktopWindow(null);
+            if (onClose) {
+              onClose();
+            }
+          }
+        }, 500);
+
+        return () => {
+          clearInterval(checkClosed);
+        };
+      } catch (error) {
+        setError(`Failed to open desktop: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     };
-  }, [vncUrl]);
+
+    openDesktop();
+  }, [vncUrl, onClose]);
 
   return (
     <div
@@ -109,63 +133,108 @@ export const DesktopViewer: React.FC<DesktopViewerProps> = ({ vncUrl, onClose })
         )}
       </div>
 
-      {/* Loading State */}
-      {loading && (
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexDirection: 'column',
-            gap: '16px',
-            color: theme.textSecondary,
-          }}
-        >
-          <span className="material-icons" style={{ fontSize: '48px' }}>
-            desktop_windows
-          </span>
-          <div>Loading desktop environment...</div>
-          <div style={{ fontSize: '12px' }}>Starting Ubuntu LXDE VNC server</div>
-        </div>
-      )}
-
-      {/* Error State */}
-      {error && (
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexDirection: 'column',
-            gap: '16px',
-            color: theme.error,
-            padding: '24px',
-            textAlign: 'center',
-          }}
-        >
-          <span className="material-icons" style={{ fontSize: '48px' }}>
-            error_outline
-          </span>
-          <div>{error}</div>
-          <div style={{ fontSize: '12px', color: theme.textSecondary }}>
-            Make sure the Docker container is running: docker run -p 8080:80 dorowu/ubuntu-desktop-lxde-vnc
-          </div>
-        </div>
-      )}
-
-      {/* VNC Desktop */}
+      {/* Status Display */}
       <div
-        ref={containerRef}
         style={{
           flex: 1,
-          width: '100%',
-          height: '100%',
-          display: loading || error ? 'none' : 'block',
-          minHeight: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexDirection: 'column',
+          gap: '16px',
+          padding: '24px',
+          textAlign: 'center',
         }}
-      />
+      >
+        {desktopWindow && !error && (
+          <>
+            <span className="material-icons" style={{ fontSize: '48px', color: theme.success }}>
+              check_circle
+            </span>
+            <div style={{ fontSize: '18px', fontWeight: 600, color: theme.text }}>
+              Desktop opened in new window
+            </div>
+            <div style={{ fontSize: '14px', color: theme.textSecondary }}>
+              The desktop should have opened in a new tab. If it didn't, please allow popups for this site.
+            </div>
+            <div style={{ fontSize: '12px', color: theme.textSecondary, marginTop: '16px' }}>
+              <div>Press F11 or use the browser's fullscreen button for fullscreen mode.</div>
+              <div style={{ marginTop: '8px' }}>
+                If you see "Connection reset", the VNC server may not be running.
+                Make sure Docker is running and the container is started.
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                if (desktopWindow && !desktopWindow.closed) {
+                  desktopWindow.focus();
+                } else {
+                  // Reopen if closed
+                  const newWindow = window.open(vncUrl, 'azalea-desktop', 'width=1280,height=720,resizable=yes');
+                  if (newWindow) {
+                    setDesktopWindow(newWindow);
+                  }
+                }
+              }}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: theme.accent,
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginTop: '16px',
+              }}
+            >
+              <span className="material-icons" style={{ fontSize: '18px' }}>
+                open_in_new
+              </span>
+              Open Desktop Window
+            </button>
+          </>
+        )}
+
+        {error && (
+          <>
+            <span className="material-icons" style={{ fontSize: '48px', color: theme.error }}>
+              error_outline
+            </span>
+            <div style={{ color: theme.error, fontSize: '16px', fontWeight: 600 }}>{error}</div>
+            <div style={{ fontSize: '12px', color: theme.textSecondary, marginTop: '8px' }}>
+              Make sure the Docker container is running: docker run -p 8080:80 dorowu/ubuntu-desktop-lxde-vnc
+            </div>
+            <button
+              onClick={() => {
+                const newWindow = window.open(vncUrl, 'azalea-desktop', 'width=1280,height=720,resizable=yes');
+                if (newWindow) {
+                  setDesktopWindow(newWindow);
+                  setError(null);
+                } else {
+                  setError('Please allow popups for this site to open the desktop.');
+                }
+              }}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: theme.accent,
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: 500,
+                marginTop: '16px',
+              }}
+            >
+              Try Again
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 };
