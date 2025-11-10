@@ -6,7 +6,6 @@ import '@xterm/xterm/css/xterm.css';
 import { useTheme } from '../../theme/theme';
 import { CloudShellService } from '../../services/cloudShellService';
 import { TerminalControls } from './TerminalControls';
-import { BackendInitializer } from '../../services/backendInitializer';
 import { autoAuthService } from '../../services/autoAuthService';
 
 interface TerminalProps {
@@ -50,7 +49,6 @@ export const Terminal: React.FC<TerminalProps> = ({
         foreground: theme.text,
         cursor: theme.accent,
         cursorAccent: theme.surface,
-        selection: theme.accent + '40',
         black: '#000000',
         red: theme.error,
         green: theme.success,
@@ -128,10 +126,8 @@ export const Terminal: React.FC<TerminalProps> = ({
       xterm.write(prompt);
     };
 
-    // Initialize backend
-    BackendInitializer.initialize().catch(() => {
-      // Silently fail if backend not available
-    });
+    // Initialize backend (if needed)
+    // BackendInitializer is used in WebVM components
 
     // Set up input handler
     let currentLine = '';
@@ -171,14 +167,17 @@ export const Terminal: React.FC<TerminalProps> = ({
 
     window.addEventListener('resize', handleResize);
     
+    let resizeObserver: ResizeObserver | null = null;
     if (terminalRef.current) {
-      const resizeObserver = new ResizeObserver(handleResize);
+      resizeObserver = new ResizeObserver(handleResize);
       resizeObserver.observe(terminalRef.current);
     }
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      resizeObserver?.disconnect();
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
       xterm.dispose();
     };
   }, [theme, instanceId, compact, initialOutput]);
