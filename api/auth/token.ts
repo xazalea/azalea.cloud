@@ -40,11 +40,10 @@ export default async function handler(
       if (metadataResponse.ok) {
         const data = await metadataResponse.json();
         token = data.access_token;
-        console.log('Got token from metadata server');
       }
     } catch (err) {
-      // Not in GCP environment - that's okay, expected in browser
-      // Silently continue - we'll return null token
+      // Not in GCP environment - that's okay, expected
+      // This will fail in browser due to mixed content, and that's fine
     }
 
     // If no token from metadata server, return null
