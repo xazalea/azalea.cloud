@@ -8,10 +8,10 @@ interface LandingPageProps {
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
   const { theme } = useTheme();
-  const { setCurrentProvider } = useProvider();
+  const { setProvider } = useProvider();
 
   const handleGetStarted = () => {
-    setCurrentProvider('azalea-cloud');
+    setProvider('azalea-cloud');
     onGetStarted();
   };
 
