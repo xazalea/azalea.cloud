@@ -19,7 +19,8 @@ export class AuthKeyService {
    * Saves an access token to the database
    */
   async saveAuthKey(token: AccessToken, metadata?: Record<string, any>): Promise<string> {
-    const authKeyRef = ref(database, `${AUTH_KEYS_PATH}/${this.userId}`);
+    const sanitizedUserId = this.sanitizeUserId(this.userId);
+    const authKeyRef = ref(database, `${AUTH_KEYS_PATH}/${sanitizedUserId}`);
     const newKeyRef = push(authKeyRef);
 
     const authKey: AuthKey = {
@@ -36,10 +37,19 @@ export class AuthKeyService {
   }
 
   /**
+   * Sanitizes a user ID for use in Firebase paths
+   * Replaces invalid characters with underscores
+   */
+  private sanitizeUserId(userId: string): string {
+    return userId.replace(/[.#$\[\]]/g, '_').replace(/@/g, '_at_');
+  }
+
+  /**
    * Gets all auth keys for the user
    */
   async getAuthKeys(): Promise<AuthKey[]> {
-    const authKeysRef = ref(database, `${AUTH_KEYS_PATH}/${this.userId}`);
+    const sanitizedUserId = this.sanitizeUserId(this.userId);
+    const authKeysRef = ref(database, `${AUTH_KEYS_PATH}/${sanitizedUserId}`);
     const snapshot = await get(authKeysRef);
 
     if (!snapshot.exists()) {
@@ -75,7 +85,8 @@ export class AuthKeyService {
    * Deletes an auth key
    */
   async deleteAuthKey(keyId: string): Promise<void> {
-    const keyRef = ref(database, `${AUTH_KEYS_PATH}/${this.userId}/${keyId}`);
+    const sanitizedUserId = this.sanitizeUserId(this.userId);
+    const keyRef = ref(database, `${AUTH_KEYS_PATH}/${sanitizedUserId}/${keyId}`);
     await remove(keyRef);
   }
 
@@ -101,7 +112,8 @@ export class AuthKeyService {
    * Listens to auth key changes
    */
   subscribeToAuthKeys(callback: (keys: AuthKey[]) => void): () => void {
-    const authKeysRef = ref(database, `${AUTH_KEYS_PATH}/${this.userId}`);
+    const sanitizedUserId = this.sanitizeUserId(this.userId);
+    const authKeysRef = ref(database, `${AUTH_KEYS_PATH}/${sanitizedUserId}`);
     
     const unsubscribe = onValue(authKeysRef, (snapshot) => {
       if (!snapshot.exists()) {

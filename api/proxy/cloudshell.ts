@@ -20,8 +20,40 @@ export default async function handler(
   }
 
   try {
-    const { path, ...queryParams } = req.query;
-    const targetPath = Array.isArray(path) ? path.join('/') : path || '';
+    // Get the path from query or from X-Original-URL header
+    let targetPath = '';
+    let originalUrl = req.headers['x-original-url'] as string;
+    
+    if (originalUrl) {
+      // Extract path and query from original URL
+      try {
+        const url = new URL(originalUrl);
+        targetPath = url.pathname + url.search;
+      } catch {
+        // If URL parsing fails, use as-is
+        targetPath = originalUrl.replace('https://shell.cloud.google.com', '');
+      }
+    } else {
+      // Fallback to query parameter
+      const { path, ...queryParams } = req.query;
+      targetPath = Array.isArray(path) ? path.join('/') : path || '';
+      
+      // Add query parameters to path
+      const queryString = new URLSearchParams();
+      Object.entries(queryParams).forEach(([key, value]) => {
+        if (key !== 'path' && value) {
+          if (Array.isArray(value)) {
+            value.forEach(v => queryString.append(key, String(v)));
+          } else {
+            queryString.append(key, String(value));
+          }
+        }
+      });
+      
+      if (queryString.toString()) {
+        targetPath += (targetPath.includes('?') ? '&' : '?') + queryString.toString();
+      }
+    }
 
     if (!targetPath) {
       res.status(400).json({ error: 'Path parameter required' });
@@ -46,23 +78,12 @@ export default async function handler(
         accessToken = data.access_token;
       }
     } catch (err) {
-      // Not in GCP - that's okay
+      // Not in GCP - that's okay, expected
     }
 
     // Build target URL
     const baseUrl = 'https://shell.cloud.google.com';
-    const url = new URL(`/${targetPath}`, baseUrl);
-    
-    // Add query parameters
-    Object.entries(queryParams).forEach(([key, value]) => {
-      if (key !== 'path' && value) {
-        if (Array.isArray(value)) {
-          value.forEach(v => url.searchParams.append(key, v));
-        } else {
-          url.searchParams.append(key, value);
-        }
-      }
-    });
+    const url = new URL(targetPath.startsWith('/') ? targetPath : `/${targetPath}`, baseUrl);
 
     // Forward the request to Cloud Shell
     const proxyResponse = await fetch(url.toString(), {

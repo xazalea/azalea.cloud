@@ -43,19 +43,13 @@ export default async function handler(
         console.log('Got token from metadata server');
       }
     } catch (err) {
-      // Not in GCP environment - that's okay
-      console.log('Not in GCP environment, metadata server not available');
+      // Not in GCP environment - that's okay, expected in browser
+      // Silently continue - we'll return null token
     }
 
-    // If no token from metadata server, try to use service account
-    // This would require service account credentials
+    // If no token from metadata server, return null
+    // Cloud Shell will handle its own authentication
     if (!token) {
-      // In a real implementation, you would:
-      // 1. Use service account credentials to get a token
-      // 2. Or use domain-wide delegation to impersonate a user
-      // 3. Or use stored OAuth refresh tokens
-      
-      // For now, return null - Cloud Shell will handle its own auth
       res.status(200).json({
         token: null,
         message: 'No token available - Cloud Shell will handle authentication',
