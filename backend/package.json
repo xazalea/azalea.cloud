@@ -7,9 +7,10 @@
     "start": "node server.js",
     "dev": "node server.js"
   },
-  "dependencies": {},
+  "dependencies": {
+    "ws": "^8.18.3"
+  },
   "engines": {
     "node": ">=14.0.0"
   }
 }
-

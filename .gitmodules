@@ -1,3 +1,6 @@
 [submodule "webvm"]
 	path = webvm
 	url = https://github.com/leaningtech/webvm.git
+[submodule "vercel-tunnel"]
+	path = vercel-tunnel
+	url = https://github.com/scubbo/vercel-tunnel.git

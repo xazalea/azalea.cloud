@@ -76,28 +76,49 @@ export class TunnelService {
 
   /**
    * Sets up a tunnel using Vercel Tunnel
-   * Uses Vercel's infrastructure to proxy to localhost
+   * Uses vercel-tunnel implementation from https://github.com/scubbo/vercel-tunnel
    */
   async setupVercelTunnel(port: number): Promise<string> {
     try {
-      const response = await fetch('/api/tunnel/vercel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ port }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.url) {
-          this.tunnelUrl = data.url;
-          return data.url;
-        }
+      // Get the listener URL (Vercel deployment URL)
+      const baseUrl = window.location.origin;
+      const listenerUrl = `${baseUrl}/api/tunnel/listener`;
+      
+      // Try to start the daemon (browser-compatible)
+      // Note: WebSocket connections from browser to Vercel may have limitations
+      // For now, we'll use the proxy API which is more reliable
+      try {
+        const { VercelTunnelDaemon } = await import('./vercelTunnelDaemon');
+        const daemon = new VercelTunnelDaemon();
+        
+        // Try to connect (may fail in browser due to CORS/WebSocket limitations)
+        await Promise.race([
+          daemon.start(port, listenerUrl),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Connection timeout')), 5000)
+          ),
+        ]);
+        
+        console.log('Vercel tunnel daemon started');
+        // If successful, use the listener URL
+        const tunnelUrl = `${baseUrl}/api/tunnel/listener`;
+        this.tunnelUrl = tunnelUrl;
+        return tunnelUrl;
+      } catch (error) {
+        console.warn('WebSocket daemon not available, using proxy API:', error);
+        // Fallback to proxy API (more reliable for Vercel)
+        const proxyUrl = `${baseUrl}/api/proxy?port=${port}&path=/vnc.html`;
+        this.tunnelUrl = proxyUrl;
+        return proxyUrl;
       }
     } catch (error) {
       console.error('Failed to setup Vercel tunnel:', error);
+      // Fallback to proxy
+      const baseUrl = window.location.origin;
+      const proxyUrl = `${baseUrl}/api/proxy?port=${port}&path=/vnc.html`;
+      this.tunnelUrl = proxyUrl;
+      return proxyUrl;
     }
-
-    throw new Error('Failed to setup Vercel tunnel');
   }
 
   /**

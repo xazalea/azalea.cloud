@@ -7,9 +7,13 @@
 const http = require('http');
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const VercelTunnelDaemon = require('./vercelTunnelDaemon');
 
 const execAsync = promisify(exec);
 const PORT = 3001;
+
+// Store active tunnel daemons
+const activeTunnels = new Map();
 
 // Store active containers
 const containers = new Map();
@@ -47,11 +51,29 @@ async function startDesktop() {
       const containerId = existingContainers.trim().split('\n')[0];
       // Start existing container
       await runDockerCommand(`start ${containerId}`);
+      
+      // Start tunnel daemon if not already running
+      if (!activeTunnels.has(containerId)) {
+        const vercelUrl = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_VERCEL_URL || 'https://azalea-cloud.vercel.app';
+        const tunnelUrl = `${vercelUrl.replace(/^https?:/, 'wss:')}/api/tunnel/accept`;
+        try {
+          const daemon = new VercelTunnelDaemon(`localhost:8080`, tunnelUrl);
+          daemon.start();
+          activeTunnels.set(containerId, daemon);
+          console.log(`Started tunnel daemon for existing container ${containerId}`);
+        } catch (error) {
+          console.error('Failed to start tunnel daemon:', error);
+        }
+      }
+      
+      const vercelUrl = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_VERCEL_URL || 'https://azalea-cloud.vercel.app';
+      const vncUrl = `${vercelUrl}/api/proxy?port=8080&path=/vnc.html`;
+      
       return {
         success: true,
         containerId,
         port: 8080,
-        vncUrl: `http://localhost:8080/vnc.html`,
+        vncUrl,
       };
     }
 
@@ -68,12 +90,35 @@ async function startDesktop() {
       createdAt: Date.now(),
     });
 
-    return {
-      success: true,
-      containerId: id,
-      port: 8080,
-      vncUrl: `http://localhost:8080/vnc.html`,
-    };
+    // Start tunnel daemon for this desktop
+    const vercelUrl = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_VERCEL_URL || 'https://azalea-cloud.vercel.app';
+    const tunnelUrl = `${vercelUrl.replace(/^https?:/, 'wss:')}/api/tunnel/accept`;
+    
+    try {
+      const daemon = new VercelTunnelDaemon(`localhost:8080`, tunnelUrl);
+      daemon.start();
+      activeTunnels.set(id, daemon);
+      console.log(`Started tunnel daemon for container ${id}`);
+      
+      // Return Vercel proxy URL instead of localhost
+      const vncUrl = `${vercelUrl}/api/proxy?port=8080&path=/vnc.html`;
+      
+      return {
+        success: true,
+        containerId: id,
+        port: 8080,
+        vncUrl,
+      };
+    } catch (error) {
+      console.error('Failed to start tunnel daemon:', error);
+      // Fallback to localhost URL
+      return {
+        success: true,
+        containerId: id,
+        port: 8080,
+        vncUrl: `http://localhost:8080/vnc.html`,
+      };
+    }
   } catch (error) {
     return {
       success: false,
@@ -87,6 +132,14 @@ async function startDesktop() {
  */
 async function stopDesktop(containerId) {
   try {
+    // Stop tunnel daemon if running
+    if (activeTunnels.has(containerId)) {
+      const daemon = activeTunnels.get(containerId);
+      daemon.close();
+      activeTunnels.delete(containerId);
+      console.log(`Stopped tunnel daemon for container ${containerId}`);
+    }
+    
     const result = await runDockerCommand(`stop ${containerId}`);
     if (result.success) {
       containers.delete(containerId);
