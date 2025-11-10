@@ -146,8 +146,7 @@ export const DesktopViewer: React.FC<DesktopViewerProps> = ({ vncUrl, onClose })
               The desktop should have opened in a new tab. If it didn't, please allow popups for this site.
             </div>
             <div style={{ fontSize: '12px', color: theme.textSecondary, marginTop: '16px' }}>
-              <div>Press F11 or use the browser's fullscreen button for fullscreen mode.</div>
-              <div style={{ marginTop: '8px' }}>
+              <div>
                 If you see "Connection reset", the VNC server may not be running.
                 Make sure Docker is running and the container is started.
               </div>

@@ -16,6 +16,7 @@ export interface CloudShellSession {
 
 export interface CommandResult {
   output: string;
+  error?: string;
   exitCode: number;
   timestamp: number;
 }
@@ -41,14 +42,28 @@ export class CloudShellService {
   /**
    * Initializes cloud environment and checks for metadata server
    * This happens automatically in the background - users don't need to authenticate
+   * Takes real time like Google Cloud Shell initialization
    */
   private async initializeCloudEnvironment(): Promise<void> {
     try {
+      // Simulate real initialization delay (like Cloud Shell)
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
       this.isCloudEnvironment = await this.metadataService.isCloudEnvironment();
       if (this.isCloudEnvironment) {
         // Pre-fetch token to ensure it's ready - this is automatic authentication
         await this.metadataService.getAccessToken();
         console.log('✓ Cloud environment detected - automatically authenticated via metadata server');
+      } else {
+        // Try to initialize backend connection
+        try {
+          const response = await fetch('http://localhost:3001/api/health');
+          if (response.ok) {
+            console.log('✓ Backend connection established');
+          }
+        } catch (error) {
+          console.log('⚠ Backend not available - using fallback mode');
+        }
       }
     } catch (error) {
       // Silently handle - not in cloud environment
@@ -90,8 +105,8 @@ export class CloudShellService {
         return await this.executeGcloudCommand(command);
       }
 
-      // For other commands, use standard execution
-      const result = await this.simulateCommand(command);
+      // For other commands, try real execution via backend
+      const result = await this.executeCommandViaBackend(command);
       return result;
     } catch (error) {
       console.error('Failed to execute command:', error);
@@ -156,7 +171,39 @@ export class CloudShellService {
   }
 
   /**
-   * Simulates command execution (for development)
+   * Executes a command via backend API (real execution)
+   */
+  private async executeCommandViaBackend(command: string): Promise<CommandResult> {
+    try {
+      // Try to execute via backend API
+      const response = await fetch('http://localhost:3001/api/command/execute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ command }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          output: data.output || '',
+          error: data.error || undefined,
+          exitCode: data.exitCode || 0,
+          timestamp: Date.now(),
+        };
+      } else {
+        throw new Error(`Backend returned status ${response.status}`);
+      }
+    } catch (error) {
+      // Fallback to simulation if backend is not available
+      console.warn('Backend not available, using fallback:', error);
+      return await this.simulateCommand(command);
+    }
+  }
+
+  /**
+   * Simulates command execution (fallback when backend unavailable)
    */
   private async simulateCommand(command: string): Promise<CommandResult> {
     // Simulate network delay

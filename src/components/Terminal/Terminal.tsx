@@ -86,17 +86,51 @@ export const Terminal: React.FC<TerminalProps> = ({
     xterm.writeln('\x1b[1;36m║\x1b[0m  \x1b[1;33mAzaleaCloud Terminal\x1b[0m                                    \x1b[1;36m║\x1b[0m');
     xterm.writeln('\x1b[1;36m╚═══════════════════════════════════════════════════════════╝\x1b[0m');
     xterm.writeln('');
+    xterm.writeln('\x1b[1;33mInitializing cloud shell environment...\x1b[0m');
+    xterm.writeln('');
 
-    // Check authentication status
-    autoAuthService.waitForAuth().then((authStatus) => {
-      if (authStatus.isAuthenticated) {
-        xterm.writeln('\x1b[1;32m✓ Automatically authenticated via metadata server\x1b[0m');
-      } else if (authStatus.isCloudEnvironment) {
-        xterm.writeln('\x1b[1;33m⚠ Authentication in progress...\x1b[0m');
+    // Initialize cloud shell with progress
+    (async () => {
+      try {
+        // Step 1: Check backend connection
+        xterm.write('\x1b[33m[1/3]\x1b[0m Checking backend connection... ');
+        try {
+          const healthResponse = await fetch('http://localhost:3001/api/health');
+          if (healthResponse.ok) {
+            xterm.writeln('\x1b[32m✓ Connected\x1b[0m');
+          } else {
+            xterm.writeln('\x1b[33m⚠ Backend not available (using fallback mode)\x1b[0m');
+          }
+        } catch {
+          xterm.writeln('\x1b[33m⚠ Backend not available (using fallback mode)\x1b[0m');
+        }
+
+        // Step 2: Check cloud environment
+        xterm.write('\x1b[33m[2/3]\x1b[0m Checking cloud environment... ');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const authStatus = await autoAuthService.waitForAuth();
+        if (authStatus.isAuthenticated) {
+          xterm.writeln('\x1b[32m✓ Authenticated via metadata server\x1b[0m');
+        } else if (authStatus.isCloudEnvironment) {
+          xterm.writeln('\x1b[33m⚠ Authentication in progress...\x1b[0m');
+        } else {
+          xterm.writeln('\x1b[33m⚠ Not in cloud environment (local mode)\x1b[0m');
+        }
+
+        // Step 3: Initialize session
+        xterm.write('\x1b[33m[3/3]\x1b[0m Creating session... ');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await cloudShellService.current.createSession();
+        xterm.writeln('\x1b[32m✓ Ready\x1b[0m');
+        xterm.writeln('');
+        xterm.writeln('\x1b[1;32mCloud shell ready! Type \x1b[1;33mhelp\x1b[0m \x1b[1;32mfor available commands.\x1b[0m\r\n');
+      } catch (error) {
+        xterm.writeln('\x1b[31m✗ Error during initialization\x1b[0m');
+        xterm.writeln(`\x1b[31m${error instanceof Error ? error.message : 'Unknown error'}\x1b[0m`);
+        xterm.writeln('');
+        xterm.writeln('\x1b[33mContinuing in fallback mode...\x1b[0m\r\n');
       }
-    });
-
-    xterm.writeln('Type \x1b[1;33mhelp\x1b[0m for available commands.\r\n');
+    })();
 
     if (initialOutput) {
       xterm.write(initialOutput);
@@ -113,7 +147,15 @@ export const Terminal: React.FC<TerminalProps> = ({
 
       try {
         const result = await cloudShellService.current.executeCommand(command);
-        xterm.write(result.output);
+        // Write stdout
+        if (result.output) {
+          xterm.write(result.output);
+        }
+        // Write stderr in red if present
+        if (result.error) {
+          xterm.write(`\x1b[31m${result.error}\x1b[0m`);
+        }
+        // Show exit code if non-zero
         if (result.exitCode !== 0) {
           xterm.write(`\r\n\x1b[31mProcess exited with code ${result.exitCode}\x1b[0m`);
         }

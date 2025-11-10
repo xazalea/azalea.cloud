@@ -5,10 +5,7 @@ import { Header } from './components/Header/Header';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { Terminal } from './components/Terminal/Terminal';
 import { CloudShellLayout } from './components/CloudShell/CloudShellLayout';
-import { AuthKeys } from './components/AuthKeys/AuthKeys';
-import { AccountManager } from './components/AccountManager/AccountManager';
-import { ProviderSelector } from './components/ProviderSelector/ProviderSelector';
-import { ProviderSpecs } from './components/ProviderSpecs/ProviderSpecs';
+import { LandingPage } from './components/LandingPage/LandingPage';
 import { WebVMLocal } from './components/WebVM/WebVMLocal';
 import { WebVMSSHX } from './components/WebVM/WebVMSSHX';
 import { WebVMWithBackend } from './components/WebVM/WebVMWithBackend';
@@ -28,6 +25,7 @@ function AppContent() {
   const { currentProvider } = useProvider();
   const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState('terminal');
+  const [showLanding, setShowLanding] = useState(true);
   const [desktopLoading, setDesktopLoading] = useState(false);
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
   const [showProgress, setShowProgress] = useState(false);
@@ -240,15 +238,8 @@ function AppContent() {
       }
     }
 
-    // Other tabs are provider-agnostic
-    switch (activeTab) {
-      case 'accounts':
-        return <AccountManager />;
-      case 'auth':
-        return <AuthKeys />;
-      default:
-        return <Terminal onCommand={undefined} />;
-    }
+    // Only terminal tab is available
+    return <Terminal onCommand={undefined} />;
   };
 
   return (
@@ -266,35 +257,36 @@ function AppContent() {
           }}
         />
       )}
-      <Header />
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
-        <main
-          style={{
-            flex: 1,
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-            backgroundColor: '#F0DAD5',
-          }}
-        >
-          {activeTab === 'terminal' && (
-            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${theme.border}` }}>
-              <ProviderSelector />
-            </div>
-          )}
-          <div 
-            style={{ 
-              flex: 1, 
-              minHeight: 0, 
-              display: 'flex', 
-              overflow: 'hidden',
-            }}
-          >
-            {renderContent()}
+      {showLanding ? (
+        <LandingPage onGetStarted={() => setShowLanding(false)} />
+      ) : (
+        <>
+          <Header />
+          <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+            <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+            <main
+              style={{
+                flex: 1,
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: '#F0DAD5',
+              }}
+            >
+              <div 
+                style={{ 
+                  flex: 1, 
+                  minHeight: 0, 
+                  display: 'flex', 
+                  overflow: 'hidden',
+                }}
+              >
+                {renderContent()}
+              </div>
+            </main>
           </div>
-        </main>
-      </div>
+        </>
+      )}
     </div>
   );
 }

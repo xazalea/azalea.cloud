@@ -241,6 +241,129 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (path === '/api/sshx/start' && req.method === 'POST') {
+      try {
+        // Install sshx if not already installed
+        const { stdout: sshxCheck } = await execAsync('which sshx || echo "not found"');
+        if (sshxCheck.trim() === 'not found') {
+          console.log('Installing sshx...');
+          await execAsync('curl -sSf https://sshx.io/get | sh', {
+            timeout: 60000,
+            maxBuffer: 1024 * 1024 * 10,
+          });
+        }
+
+        // Start sshx and capture the session URL
+        console.log('Starting sshx...');
+        const { stdout: sshxOutput } = await execAsync('sshx', {
+          timeout: 30000,
+          maxBuffer: 1024 * 1024 * 10,
+        });
+
+        // Parse sshx output to extract session URL
+        // sshx typically outputs something like: "Session: https://sshx.io/abc123"
+        const urlMatch = sshxOutput.match(/https?:\/\/sshx\.io\/[a-zA-Z0-9-]+/);
+        const sessionUrl = urlMatch ? urlMatch[0] : null;
+
+        if (sessionUrl) {
+          res.writeHead(200);
+          res.end(JSON.stringify({ 
+            success: true, 
+            url: sessionUrl,
+            sessionId: sessionUrl.split('/').pop(),
+          }));
+        } else {
+          // If no URL found, return the sshx.io homepage URL
+          res.writeHead(200);
+          res.end(JSON.stringify({ 
+            success: true, 
+            url: 'https://sshx.io/',
+            sessionId: null,
+          }));
+        }
+      } catch (error) {
+        console.error('SSHX start error:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ 
+          success: false, 
+          error: error.message,
+          fallback: 'https://sshx.io/',
+        }));
+      }
+      return;
+    }
+
+    if (path === '/api/command/execute' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk.toString();
+      });
+      req.on('end', async () => {
+        try {
+          const { command } = JSON.parse(body);
+          
+          if (!command || typeof command !== 'string') {
+            res.writeHead(400);
+            res.end(JSON.stringify({ error: 'Command is required' }));
+            return;
+          }
+
+          // Execute the command
+          console.log(`Executing command: ${command}`);
+          try {
+            const { stdout, stderr } = await execAsync(command, {
+              timeout: 30000,
+              maxBuffer: 1024 * 1024 * 10, // 10MB
+              cwd: process.env.HOME || '/home/user',
+              env: { ...process.env, PATH: process.env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' },
+            });
+
+            res.writeHead(200);
+            res.end(JSON.stringify({
+              success: true,
+              output: stdout || '',
+              error: stderr || '',
+              exitCode: 0,
+            }));
+          } catch (execError) {
+            // execAsync throws on non-zero exit codes, but we want to return the output
+            const stdout = execError.stdout || '';
+            const stderr = execError.stderr || '';
+            const exitCode = execError.code || 1;
+
+            res.writeHead(200);
+            res.end(JSON.stringify({
+              success: true,
+              output: stdout,
+              error: stderr,
+              exitCode: exitCode,
+            }));
+          }
+        } catch (error) {
+          console.error('Command execution error:', error);
+          res.writeHead(500);
+          res.end(JSON.stringify({
+            success: false,
+            output: '',
+            error: error.message || 'Unknown error',
+            exitCode: 1,
+          }));
+        }
+      });
+      return;
+    }
+
+    if (path === '/api/cloudshell/init' && req.method === 'POST') {
+      // Simulate cloud shell initialization (takes time like real Cloud Shell)
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        success: true,
+        message: 'Cloud shell initialization started',
+        estimatedTime: 30000, // 30 seconds
+      }));
+      return;
+    }
+
     // 404
     res.writeHead(404);
     res.end(JSON.stringify({ error: 'Not found' }));

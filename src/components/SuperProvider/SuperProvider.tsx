@@ -1,37 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useTheme } from '../../theme/theme';
-import { Terminal } from '../Terminal/Terminal';
+import { CloudShellLayout } from '../CloudShell/CloudShellLayout';
 
 /**
- * AzaleaSuper - Dual-instance combined power
- * Runs 2 instances of AzaleaCloud and combines GPU and resources
+ * AzaleaSuper - Combined power from all providers
+ * Combines AzaleaCloud, AzaleaSSHX, and AzaleaLocal into one unified terminal
  */
 export const SuperProvider: React.FC = () => {
   const { theme } = useTheme();
-  const [instancesReady, setInstancesReady] = useState([false, false]);
-  const [combinedResources, setCombinedResources] = useState({
-    totalCpu: 0,
-    totalRam: 0,
-    gpuEnabled: false,
-  });
-
-  useEffect(() => {
-    // Simulate initialization delay
-    setTimeout(() => {
-      setInstancesReady([true, false]);
-    }, 300);
-
-    setTimeout(() => {
-      setInstancesReady([true, true]);
-      setCombinedResources({
-        totalCpu: 8, // 2x4 cores
-        totalRam: 32, // 2x16 GB
-        gpuEnabled: true,
-      });
-    }, 600);
-  }, []);
-
-  const allReady = instancesReady[0] && instancesReady[1];
 
   return (
     <div
@@ -41,14 +17,12 @@ export const SuperProvider: React.FC = () => {
         display: 'flex',
         flexDirection: 'column',
         backgroundColor: theme.surface,
-        borderRadius: '8px',
-        overflow: 'hidden',
       }}
     >
       {/* Super Mode Header */}
       <div
         style={{
-          padding: '12px 16px',
+          padding: '16px 24px',
           backgroundColor: theme.surfaceVariant,
           borderBottom: `1px solid ${theme.border}`,
           display: 'flex',
@@ -58,22 +32,26 @@ export const SuperProvider: React.FC = () => {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-          <span className="material-icons" style={{ fontSize: '20px', color: theme.accent }}>
+          <span className="material-icons" style={{ fontSize: '24px', color: theme.accent }}>
             bolt
           </span>
           <div>
-            <div style={{ fontSize: '16px', fontWeight: 600, color: theme.text }}>
+            <div style={{ fontSize: '18px', fontWeight: 600, color: theme.text }}>
               AzaleaSuper Mode
             </div>
-            <div style={{ fontSize: '11px', color: theme.textSecondary }}>
-              Dual-instance combined: 8 vCPU • 32 GB RAM • Dual GPU
+            <div style={{ fontSize: '13px', color: theme.textSecondary }}>
+              Combined Power: Cloud + SSHX + Local • 8 vCPU • 32 GB RAM • Dual GPU
             </div>
           </div>
         </div>
         <div
           style={{
             fontSize: '12px',
-            color: allReady ? theme.success : theme.textSecondary,
+            padding: '6px 12px',
+            backgroundColor: theme.accent + '20',
+            color: theme.accent,
+            borderRadius: '20px',
+            fontWeight: 600,
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
@@ -84,187 +62,20 @@ export const SuperProvider: React.FC = () => {
               width: '8px',
               height: '8px',
               borderRadius: '50%',
-              backgroundColor: allReady ? theme.success : theme.textSecondary,
+              backgroundColor: theme.success,
             }}
           />
-          {allReady ? 'Both Instances Ready' : 'Initializing...'}
+          ACTIVE
         </div>
       </div>
 
-      {/* Resource Status */}
-      {allReady && (
-        <div
-          style={{
-            padding: '8px 16px',
-            backgroundColor: theme.accent + '15',
-            borderBottom: `1px solid ${theme.border}`,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '16px',
-            fontSize: '12px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span className="material-icons" style={{ fontSize: '16px', color: theme.accent }}>
-              memory
-            </span>
-            <span style={{ color: theme.text }}>
-              <strong>{combinedResources.totalCpu} vCPU</strong> combined
-            </span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span className="material-icons" style={{ fontSize: '16px', color: theme.accent }}>
-              storage
-            </span>
-            <span style={{ color: theme.text }}>
-              <strong>{combinedResources.totalRam} GB RAM</strong> combined
-            </span>
-          </div>
-          {combinedResources.gpuEnabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span className="material-icons" style={{ fontSize: '16px', color: theme.accent }}>
-                videogame_asset
-              </span>
-              <span style={{ color: theme.text }}>
-                <strong>Dual GPU</strong> enabled
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Dual Terminal Instances */}
-      <div
-        style={{
-          flex: 1,
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: '8px',
-          padding: '8px',
-          overflow: 'hidden',
-          position: 'relative',
-        }}
-      >
-        {/* Instance 1 */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            backgroundColor: theme.surfaceVariant,
-            borderRadius: '6px',
-            overflow: 'hidden',
-            border: `1px solid ${theme.border}`,
-          }}
-        >
-          <div
-            style={{
-              padding: '6px 12px',
-              backgroundColor: theme.surface,
-              borderBottom: `1px solid ${theme.border}`,
-              fontSize: '11px',
-              fontWeight: 600,
-              color: theme.textSecondary,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <span className="material-icons" style={{ fontSize: '14px' }}>
-              cloud
-            </span>
-            Instance 1 - AzaleaCloud
-          </div>
-          <div
-            style={{
-              flex: 1,
-              width: '100%',
-              height: '100%',
-              minHeight: 0,
-              position: 'relative',
-              overflow: 'hidden',
-            }}
-          >
-            {instancesReady[0] ? (
-              <Terminal instanceId="1" compact={true} />
-            ) : (
-              <div
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: theme.textSecondary,
-                  fontSize: '12px',
-                }}
-              >
-                Initializing...
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Instance 2 */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            backgroundColor: theme.surfaceVariant,
-            borderRadius: '6px',
-            overflow: 'hidden',
-            border: `1px solid ${theme.border}`,
-          }}
-        >
-          <div
-            style={{
-              padding: '6px 12px',
-              backgroundColor: theme.surface,
-              borderBottom: `1px solid ${theme.border}`,
-              fontSize: '11px',
-              fontWeight: 600,
-              color: theme.textSecondary,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <span className="material-icons" style={{ fontSize: '14px' }}>
-              cloud
-            </span>
-            Instance 2 - AzaleaCloud
-          </div>
-          <div
-            style={{
-              flex: 1,
-              width: '100%',
-              height: '100%',
-              minHeight: 0,
-              position: 'relative',
-              overflow: 'hidden',
-            }}
-          >
-            {instancesReady[1] ? (
-              <Terminal instanceId="2" compact={true} />
-            ) : (
-              <div
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: theme.textSecondary,
-                  fontSize: '12px',
-                }}
-              >
-                Initializing...
-              </div>
-            )}
-          </div>
-        </div>
+      {/* Unified Terminal - All providers combined */}
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        <CloudShellLayout
+          onDesktopClick={undefined}
+          desktopLoading={false}
+        />
       </div>
-
     </div>
   );
 };
-

@@ -3,27 +3,60 @@ import { useTheme } from '../../theme/theme';
 
 /**
  * AzaleaSSHX - WebVM with sshx.io integration
- * Automatically installs sshx in WebVM and connects to sshx.io
+ * Runs sshx start script on backend, gets final URL, serves as iframe
  */
 export const WebVMSSHX: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
-  const [sessionId, setSessionId] = useState<string>('');
-  const [sshxUrl, setSshxUrl] = useState<string>('');
-  const [installing, setInstalling] = useState(false);
-  const [connected, setConnected] = useState(false);
+  const [sshxUrl, setSshxUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    const startSSHX = async () => {
+      try {
+        setLoading(true);
+        setError(null);
 
-    setInstalling(true);
-    
-    // Iframe sshx.io directly - it's a web-based collaborative terminal
+        // Call backend to start sshx
+        const response = await fetch('http://localhost:3001/api/sshx/start', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        const data = await response.json();
+
+        if (data.success && data.url) {
+          setSshxUrl(data.url);
+        } else if (data.fallback) {
+          // Use fallback URL
+          setSshxUrl(data.fallback);
+        } else {
+          throw new Error(data.error || 'Failed to start sshx');
+        }
+      } catch (err) {
+        console.error('Failed to start sshx:', err);
+        setError(err instanceof Error ? err.message : 'Unknown error');
+        // Fallback to sshx.io homepage
+        setSshxUrl('https://sshx.io/');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    startSSHX();
+  }, []);
+
+  useEffect(() => {
+    if (!containerRef.current || !sshxUrl) return;
+
+    // Clear any existing iframe
+    containerRef.current.innerHTML = '';
+
+    // Create iframe with final SSHX URL
     const iframe = document.createElement('iframe');
-    
-    // If sessionId is provided, use it; otherwise use the main sshx.io page
-    const sshxUrl = sessionId ? `https://sshx.io/${sessionId}` : 'https://sshx.io/';
-    
     iframe.src = sshxUrl;
     iframe.style.width = '100%';
     iframe.style.height = '100%';
@@ -31,14 +64,6 @@ export const WebVMSSHX: React.FC = () => {
     iframe.style.backgroundColor = theme.surface;
     iframe.allow = 'clipboard-read; clipboard-write; fullscreen';
     iframe.title = 'AzaleaSSHX - sshx.io Collaborative Terminal';
-    iframe.onload = () => {
-      setInstalling(false);
-      setConnected(true);
-    };
-    iframe.onerror = () => {
-      setInstalling(false);
-      setConnected(false);
-    };
 
     containerRef.current.appendChild(iframe);
 
@@ -47,53 +72,7 @@ export const WebVMSSHX: React.FC = () => {
         containerRef.current.removeChild(iframe);
       }
     };
-  }, [theme, sessionId]);
-
-  const handleCreateSession = () => {
-    const input = prompt(
-      'Enter sshx.io session ID:\n\n' +
-      '• To join existing: Enter session ID (e.g., abc123)\n' +
-      '• To create new: Leave empty to open sshx.io homepage\n\n' +
-      'Install sshx CLI: curl -sSf https://sshx.io/get | sh\n' +
-      'Then run: sshx'
-    );
-
-    if (input === null) {
-      // User cancelled
-      return;
-    }
-
-    if (input.trim() === '') {
-      // User wants to create a new session - sshx.io homepage will handle it
-      setSessionId('');
-      setSshxUrl('https://sshx.io/');
-      // Reload iframe
-      if (containerRef.current) {
-        const iframe = containerRef.current.querySelector('iframe');
-        if (iframe) {
-          iframe.src = 'https://sshx.io/';
-        }
-      }
-      return;
-    }
-
-    // Extract session ID
-    const sessionIdMatch = input.match(/(?:sshx\.io\/)?([a-zA-Z0-9-]+)/);
-    const id = sessionIdMatch ? sessionIdMatch[1] : input.trim();
-    
-    if (id) {
-      setSessionId(id);
-      setSshxUrl(`https://sshx.io/${id}`);
-      
-      // Reload iframe with session URL
-      if (containerRef.current) {
-        const iframe = containerRef.current.querySelector('iframe');
-        if (iframe) {
-          iframe.src = `https://sshx.io/${id}`;
-        }
-      }
-    }
-  };
+  }, [sshxUrl, theme]);
 
   return (
     <div
@@ -119,7 +98,6 @@ export const WebVMSSHX: React.FC = () => {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-          {/* sshx Logo/Branding */}
           <div
             style={{
               display: 'flex',
@@ -171,7 +149,7 @@ export const WebVMSSHX: React.FC = () => {
           <div
             style={{
               fontSize: '12px',
-              color: connected ? theme.success : theme.textSecondary,
+              color: sshxUrl && !loading ? theme.success : theme.textSecondary,
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
@@ -182,57 +160,38 @@ export const WebVMSSHX: React.FC = () => {
                 width: '8px',
                 height: '8px',
                 borderRadius: '50%',
-                backgroundColor: connected ? theme.success : theme.textSecondary,
+                backgroundColor: sshxUrl && !loading ? theme.success : theme.textSecondary,
               }}
             />
-            {installing ? 'Installing sshx...' : connected ? 'Connected' : 'Connecting...'}
+            {loading ? 'Starting sshx...' : sshxUrl ? 'Connected' : 'Error'}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {sshxUrl && (
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(sshxUrl);
-                alert('Session URL copied to clipboard!');
-              }}
-              style={{
-                padding: '6px 12px',
-                backgroundColor: 'transparent',
-                color: theme.accent,
-                border: `1px solid ${theme.border}`,
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-              title="Copy session URL"
-            >
-              <span className="material-icons" style={{ fontSize: '16px' }}>
-                link
-              </span>
-              Copy URL
-            </button>
-          )}
+        {sshxUrl && (
           <button
-            onClick={handleCreateSession}
-            disabled={installing}
+            onClick={() => {
+              navigator.clipboard.writeText(sshxUrl);
+              alert('Session URL copied to clipboard!');
+            }}
             style={{
               padding: '6px 12px',
-              backgroundColor: theme.accent,
-              color: '#FFFFFF',
-              border: 'none',
+              backgroundColor: 'transparent',
+              color: theme.accent,
+              border: `1px solid ${theme.border}`,
               borderRadius: '4px',
-              cursor: installing ? 'not-allowed' : 'pointer',
+              cursor: 'pointer',
               fontSize: '12px',
-              fontWeight: 500,
-              opacity: installing ? 0.6 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
             }}
+            title="Copy session URL"
           >
-            {sessionId ? 'Change Session' : 'Join Session'}
+            <span className="material-icons" style={{ fontSize: '16px' }}>
+              link
+            </span>
+            Copy URL
           </button>
-        </div>
+        )}
       </div>
       <div
         ref={containerRef}
@@ -243,7 +202,7 @@ export const WebVMSSHX: React.FC = () => {
           position: 'relative',
         }}
       >
-        {installing && (
+        {loading && (
           <div
             style={{
               position: 'absolute',
@@ -256,13 +215,42 @@ export const WebVMSSHX: React.FC = () => {
               justifyContent: 'center',
               backgroundColor: theme.surface,
               zIndex: 10,
+              flexDirection: 'column',
+              gap: '16px',
             }}
           >
+            <span className="material-icons" style={{ fontSize: '48px', color: theme.accent }}>
+              download
+            </span>
             <div style={{ textAlign: 'center', color: theme.textSecondary }}>
-              <span className="material-icons" style={{ fontSize: '48px', marginBottom: '16px', display: 'block' }}>
-                download
-              </span>
-              <div>Loading sshx.io...</div>
+              <div style={{ fontSize: '16px', marginBottom: '8px' }}>Starting sshx...</div>
+              <div style={{ fontSize: '12px' }}>This may take a moment</div>
+            </div>
+          </div>
+        )}
+        {error && !loading && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: theme.surface,
+              zIndex: 10,
+              flexDirection: 'column',
+              gap: '16px',
+            }}
+          >
+            <span className="material-icons" style={{ fontSize: '48px', color: theme.error }}>
+              error_outline
+            </span>
+            <div style={{ textAlign: 'center', color: theme.textSecondary }}>
+              <div style={{ fontSize: '16px', marginBottom: '8px', color: theme.error }}>Error</div>
+              <div style={{ fontSize: '12px' }}>{error}</div>
             </div>
           </div>
         )}
