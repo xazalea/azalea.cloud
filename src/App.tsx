@@ -4,6 +4,7 @@ import { ProviderProvider } from './context/ProviderContext';
 import { Header } from './components/Header/Header';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { Terminal } from './components/Terminal/Terminal';
+import { CloudShellLayout } from './components/CloudShell/CloudShellLayout';
 import { AuthKeys } from './components/AuthKeys/AuthKeys';
 import { AccountManager } from './components/AccountManager/AccountManager';
 import { ProviderSelector } from './components/ProviderSelector/ProviderSelector';
@@ -48,23 +49,15 @@ function AppContent() {
     });
 
     // Start token refresh asynchronously (non-blocking)
-    // Don't wait for this to complete before rendering
+    // Don't wait for this to complete before rendering - use immediate timeout
     if (typeof window !== 'undefined') {
-      // Use requestIdleCallback if available, otherwise setTimeout
-      const scheduleCheck = (callback: () => void) => {
-        if ('requestIdleCallback' in window) {
-          requestIdleCallback(callback, { timeout: 2000 });
-        } else {
-          setTimeout(callback, 100);
-        }
-      };
-
-      scheduleCheck(() => {
+      // Use immediate timeout to prevent blocking
+      setTimeout(() => {
         const checkMetadataServer = async () => {
           try {
-            // Try to fetch from metadata server with short timeout
+            // Try to fetch from metadata server with very short timeout
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 500); // 500ms timeout
+            const timeoutId = setTimeout(() => controller.abort(), 200); // 200ms timeout
             
             const response = await fetch(
               'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
@@ -72,21 +65,21 @@ function AppContent() {
                 headers: { 'Metadata-Flavor': 'Google' },
                 signal: controller.signal,
               }
-            );
+            ).catch(() => null); // Catch all errors immediately
+            
             clearTimeout(timeoutId);
             
-            if (response.ok) {
-              await manager.start();
+            if (response?.ok) {
+              manager.start().catch(() => {}); // Don't wait
               setTokenManager(manager);
             }
           } catch (error) {
-            // Metadata server not available (expected in local development)
             // Silently fail - don't block UI
           }
         };
 
         checkMetadataServer();
-      });
+      }, 0);
     }
 
     // Start background worker asynchronously (non-blocking)
@@ -222,10 +215,8 @@ function AppContent() {
       switch (currentProvider) {
         case 'azalea-cloud':
           return (
-            <Terminal 
-              onCommand={undefined}
+            <CloudShellLayout
               onDesktopClick={handleStartDesktop}
-              showDesktopButton={true}
               desktopLoading={desktopLoading}
             />
           );
@@ -238,7 +229,12 @@ function AppContent() {
         case 'azalea-ultra':
           return <UltraProvider />;
         default:
-          return <Terminal onCommand={undefined} />;
+          return (
+            <CloudShellLayout
+              onDesktopClick={handleStartDesktop}
+              desktopLoading={desktopLoading}
+            />
+          );
       }
     }
 
