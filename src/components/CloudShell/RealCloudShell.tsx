@@ -58,6 +58,64 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
   }, []);
 
   /**
+   * Sets up proxy for Cloud Shell API requests to bypass CORS
+   * This intercepts all requests to shell.cloud.google.com and routes them through our backend proxy
+   */
+  const setupCloudShellProxy = (): void => {
+    // Intercept fetch requests to Cloud Shell
+    const originalFetch = window.fetch;
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      
+      // Proxy requests to shell.cloud.google.com through our backend
+      if (url.includes('shell.cloud.google.com')) {
+        const urlObj = new URL(url);
+        const proxyPath = urlObj.pathname + urlObj.search;
+        
+        // Use our proxy endpoint
+        const proxyUrl = `/api/proxy/cloudshell?path=${encodeURIComponent(proxyPath.replace(/^\//, ''))}`;
+        
+        return originalFetch(proxyUrl, {
+          ...init,
+          headers: {
+            ...init?.headers,
+            'X-Original-URL': url,
+          },
+        });
+      }
+      
+      return originalFetch(input, init);
+    };
+
+    // Also intercept XMLHttpRequest
+    const originalXHROpen = XMLHttpRequest.prototype.open;
+    const originalXHRSend = XMLHttpRequest.prototype.send;
+    
+    XMLHttpRequest.prototype.open = function(method: string, url: string | URL, async?: boolean, username?: string | null, password?: string | null) {
+      const urlStr = url.toString();
+      
+      // Proxy Cloud Shell requests
+      if (urlStr.includes('shell.cloud.google.com')) {
+        const urlObj = new URL(urlStr);
+        const proxyPath = urlObj.pathname + urlObj.search;
+        const proxyUrl = `/api/proxy/cloudshell?path=${encodeURIComponent(proxyPath.replace(/^\//, ''))}`;
+        (this as any)._proxied = true;
+        (this as any)._originalUrl = urlStr;
+        return originalXHROpen.call(this, method, proxyUrl, async ?? true, username ?? null, password ?? null);
+      }
+      
+      return originalXHROpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
+    };
+    
+    XMLHttpRequest.prototype.send = function(body?: Document | XMLHttpRequestBodyInit | null) {
+      if ((this as any)._proxied) {
+        this.setRequestHeader('X-Original-URL', (this as any)._originalUrl);
+      }
+      return originalXHRSend.call(this, body);
+    };
+  };
+
+  /**
    * Applies Azalea branding to Cloud Shell UI
    */
   const applyAzaleaBranding = () => {
@@ -199,13 +257,22 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
       ]);
 
       // Set CSH_SERVER_VARS (Cloud Shell server variables)
-      (window as any).CSH_SERVER_VARS = serverVars;
+      // Override Cloud Shell API endpoints to use our proxy
+      const originalServerVars = JSON.parse(serverVars);
+      // Modify server URLs to use our proxy
+      if (originalServerVars[1] && Array.isArray(originalServerVars[1])) {
+        originalServerVars[1][0] = window.location.origin; // Use our origin for API calls
+      }
+      (window as any).CSH_SERVER_VARS = JSON.stringify(originalServerVars);
       (window as any).CSH_LOAD_T0 = Date.now();
 
       // Define _DumpException function (required by Cloud Shell)
       (window as any)._DumpException = function(e: any) {
         console.error('Cloud Shell error:', e);
       };
+
+      // Intercept fetch/XMLHttpRequest to proxy Cloud Shell API calls
+      setupCloudShellProxy();
 
       // Load the main Cloud Shell script from gstatic
       const script = document.createElement('script');
@@ -214,10 +281,8 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
       script.onload = () => {
         (window as any).CSH_LOAD_T1 = Date.now();
         console.log('Azalea Cloud Shell loaded (using real Google Cloud Shell scripts)');
-        console.log('Authentication: Cloud Shell will use metadata server automatically');
+        console.log('API requests will be proxied through Azalea backend');
         
-        // Cloud Shell will automatically authenticate via metadata server
-        // when running in a GCP environment
         resolve();
       };
       script.onerror = () => {
