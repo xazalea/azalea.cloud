@@ -4,7 +4,7 @@
  * No user interaction required - works like Cloud Shell
  */
 
-import { CloudMetadataService } from '../lib/services/cloudMetadataService';
+import { CloudMetadataService } from '../../lib/services/cloudMetadataService';
 
 export interface AuthStatus {
   isAuthenticated: boolean;
