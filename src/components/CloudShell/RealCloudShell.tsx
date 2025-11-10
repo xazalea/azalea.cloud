@@ -59,51 +59,70 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
 
   /**
    * Sets up proxy for Cloud Shell API requests to bypass CORS
-   * This intercepts all requests to shell.cloud.google.com and routes them through our backend proxy
+   * Intercepts ALL requests to shell.cloud.google.com AND our domain's /cloudshell/* paths
+   * This matches the behavior expected by Cloud Shell scripts
    */
   const setupCloudShellProxy = (): void => {
     // Intercept fetch requests to Cloud Shell
     const originalFetch = window.fetch;
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const urlStr = url.toString();
       
-      // Proxy requests to shell.cloud.google.com through our backend
-      // Note: Requests to our own domain's /cloudshell/* are handled by Vercel rewrites
-      if (url.includes('shell.cloud.google.com')) {
-        const urlObj = new URL(url);
-        const proxyPath = urlObj.pathname + urlObj.search;
+      // Proxy ALL requests to shell.cloud.google.com through our backend
+      // Also proxy requests to our own domain's /cloudshell/* paths
+      if (urlStr.includes('shell.cloud.google.com') || urlStr.includes('/cloudshell/')) {
+        let proxyPath = '';
         
-        // Use our proxy endpoint
+        if (urlStr.includes('shell.cloud.google.com')) {
+          const urlObj = new URL(urlStr);
+          proxyPath = urlObj.pathname + urlObj.search;
+        } else {
+          // Request to our domain's /cloudshell/* - extract the path
+          const urlObj = new URL(urlStr);
+          proxyPath = urlObj.pathname.replace(/^\/cloudshell/, '') + urlObj.search;
+        }
+        
+        // Route through our proxy API
         const proxyUrl = `/api/proxy/cloudshell?path=${encodeURIComponent(proxyPath.replace(/^\//, ''))}`;
         
         return originalFetch(proxyUrl, {
           ...init,
           headers: {
             ...init?.headers,
-            'X-Original-URL': url,
+            'X-Original-URL': urlStr.includes('shell.cloud.google.com') ? urlStr : `https://shell.cloud.google.com${proxyPath}`,
           },
         });
       }
       
-      // For requests to our own domain's /cloudshell/*, let them go through normally
-      // Vercel will rewrite them to /api/cloudshell/*
       return originalFetch(input, init);
     };
 
-    // Also intercept XMLHttpRequest
+    // Also intercept XMLHttpRequest (Cloud Shell uses this heavily)
     const originalXHROpen = XMLHttpRequest.prototype.open;
     const originalXHRSend = XMLHttpRequest.prototype.send;
     
     XMLHttpRequest.prototype.open = function(method: string, url: string | URL, async?: boolean, username?: string | null, password?: string | null) {
       const urlStr = url.toString();
       
-      // Proxy Cloud Shell requests
-      if (urlStr.includes('shell.cloud.google.com')) {
-        const urlObj = new URL(urlStr);
-        const proxyPath = urlObj.pathname + urlObj.search;
+      // Proxy ALL Cloud Shell requests - both shell.cloud.google.com and our domain's /cloudshell/*
+      if (urlStr.includes('shell.cloud.google.com') || urlStr.includes('/cloudshell/')) {
+        let proxyPath = '';
+        let originalUrl = urlStr;
+        
+        if (urlStr.includes('shell.cloud.google.com')) {
+          const urlObj = new URL(urlStr);
+          proxyPath = urlObj.pathname + urlObj.search;
+        } else {
+          // Request to our domain's /cloudshell/* - extract the path
+          const urlObj = new URL(urlStr);
+          proxyPath = urlObj.pathname.replace(/^\/cloudshell/, '') + urlObj.search;
+          originalUrl = `https://shell.cloud.google.com${proxyPath}`;
+        }
+        
         const proxyUrl = `/api/proxy/cloudshell?path=${encodeURIComponent(proxyPath.replace(/^\//, ''))}`;
         (this as any)._proxied = true;
-        (this as any)._originalUrl = urlStr;
+        (this as any)._originalUrl = originalUrl;
         return originalXHROpen.call(this, method, proxyUrl, async ?? true, username ?? null, password ?? null);
       }
       
@@ -260,17 +279,9 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
       ]);
 
       // Set CSH_SERVER_VARS (Cloud Shell server variables)
-      // Override Cloud Shell API endpoints to use our domain
-      const originalServerVars = JSON.parse(serverVars);
-      // Modify server URLs to use our domain for API calls
-      // Cloud Shell will make requests to /cloudshell/* which we'll proxy
-      if (originalServerVars[1] && Array.isArray(originalServerVars[1])) {
-        // Keep the original shell.cloud.google.com URL structure
-        // But our proxy will intercept requests to /cloudshell/*
-        // So we modify the base URL to our domain
-        originalServerVars[1][0] = window.location.origin;
-      }
-      (window as any).CSH_SERVER_VARS = JSON.stringify(originalServerVars);
+      // Use the EXACT same format as shell.html
+      // Keep shell.cloud.google.com as the base URL - our proxy will intercept
+      (window as any).CSH_SERVER_VARS = serverVars;
       (window as any).CSH_LOAD_T0 = Date.now();
 
       // Define _DumpException function (required by Cloud Shell)
@@ -279,6 +290,7 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
       };
 
       // Intercept fetch/XMLHttpRequest to proxy Cloud Shell API calls
+      // MUST be set up BEFORE Cloud Shell scripts load
       setupCloudShellProxy();
 
       // Load the main Cloud Shell script from gstatic
