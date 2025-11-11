@@ -1,225 +1,135 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-/**
- * Cloud Shell API Proxy
- * Handles all /cloudshell/* requests and proxies them to Google Cloud Shell
- */
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<void> {
-  let responseSent = false;
-  
-  const sendResponse = (status: number, data: any) => {
-    if (responseSent || res.headersSent) {
-      if (!responseSent) {
-        console.warn('Response already sent, ignoring duplicate');
-      }
-      return;
-    }
-    responseSent = true;
-    res.status(status).json(data);
-  };
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
 
-  const sendTextResponse = (status: number, data: string) => {
-    if (responseSent || res.headersSent) {
-      if (!responseSent) {
-        console.warn('Response already sent, ignoring duplicate');
-      }
-      return;
-    }
-    responseSent = true;
-    res.status(status).send(data);
-  };
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
 
   try {
-    // CORS headers - set first
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    // Get path from catch-all route
+    const path = req.query.path;
+    const pathStr = Array.isArray(path) ? path.join('/') : (path ? String(path) : '');
 
-    if (req.method === 'OPTIONS') {
-      responseSent = true;
-      res.status(200).end();
-      return;
-    }
-    // Get the path from the catch-all route
-    const path = req.query.path as string[] | string;
-    const pathStr = Array.isArray(path) ? path.join('/') : path || '';
-    
-    // Get access token for authentication
-    let accessToken: string | null = null;
-    
-    try {
-      // Try metadata server (if running in GCP)
-      // Use AbortController for timeout compatibility
-      const controller = new AbortController();
-      let timeoutId: NodeJS.Timeout | null = null;
-      
-      try {
-        timeoutId = setTimeout(() => controller.abort(), 1000);
-        
-        const metadataResponse = await fetch(
-          'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
-          {
-            headers: { 'Metadata-Flavor': 'Google' },
-            signal: controller.signal,
-          }
-        );
-
-        if (timeoutId) clearTimeout(timeoutId);
-
-        if (metadataResponse.ok) {
-          const data = await metadataResponse.json();
-          accessToken = data.access_token;
-        }
-      } catch (fetchError) {
-        if (timeoutId) clearTimeout(timeoutId);
-        // Not in GCP - that's okay, expected
-      }
-    } catch (err) {
-      // Not in GCP - that's okay, expected
-    }
-
-    // Build target URL to Google Cloud Shell
+    // Build target URL
     const baseUrl = 'https://shell.cloud.google.com';
     const targetPath = pathStr ? `/${pathStr}` : '/';
-    let url: URL;
+    
+    let targetUrl: string;
     try {
-      url = new URL(targetPath, baseUrl);
-      
+      const url = new URL(targetPath, baseUrl);
       // Add query parameters from original request
-      Object.entries(req.query).forEach(([key, value]) => {
-        if (key !== 'path' && value) {
-          try {
-            if (Array.isArray(value)) {
-              value.forEach(v => url.searchParams.append(key, String(v)));
-            } else {
-              url.searchParams.append(key, String(value));
+      if (req.query) {
+        Object.entries(req.query).forEach(([key, value]) => {
+          if (key !== 'path' && value !== undefined && value !== null) {
+            try {
+              if (Array.isArray(value)) {
+                value.forEach(v => url.searchParams.append(key, String(v)));
+              } else {
+                url.searchParams.append(key, String(value));
+              }
+            } catch {
+              // Ignore invalid query params
             }
-          } catch (paramError) {
-            // Ignore invalid query parameters
-            console.warn(`Failed to add query parameter ${key}:`, paramError);
           }
-        }
-      });
+        });
+      }
+      targetUrl = url.toString();
     } catch (urlError) {
-      console.error('Invalid URL construction:', urlError, 'pathStr:', pathStr);
-      sendResponse(400, {
+      return res.status(400).json({ 
         error: 'Invalid URL path',
-        message: urlError instanceof Error ? urlError.message : 'Failed to construct URL',
+        message: urlError instanceof Error ? urlError.message : 'Failed to construct URL'
       });
-      return;
     }
 
-    // Forward the request to Cloud Shell
-    let proxyResponse: Response;
-    try {
-      proxyResponse = await fetch(url.toString(), {
-        method: req.method,
-        headers: {
-          'Content-Type': req.headers['content-type'] || 'application/json',
-          ...(accessToken && { 'Authorization': `Bearer ${accessToken}` }),
-          'User-Agent': req.headers['user-agent'] || 'AzaleaCloud/1.0',
-          // Forward other important headers
-          ...(req.headers['cookie'] && { 'Cookie': req.headers['cookie'] }),
-          ...(req.headers['referer'] && { 'Referer': req.headers['referer'] }),
-        },
-        body: (() => {
-          if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
-            return undefined;
-          }
-          if (req.body === undefined || req.body === null) {
-            return undefined;
-          }
-          if (typeof req.body === 'string') {
-            return req.body;
-          }
-          if (typeof req.body === 'object') {
-            try {
-              return JSON.stringify(req.body);
-            } catch {
-              return String(req.body);
-            }
-          }
-          return String(req.body);
-        })(),
-      });
-    } catch (fetchError) {
-      console.error('Failed to fetch from Cloud Shell:', fetchError);
-      sendResponse(502, {
-        error: 'Failed to connect to Cloud Shell',
-        message: fetchError instanceof Error ? fetchError.message : 'Unknown error',
-      });
-      return;
+    // Prepare headers
+    const proxyHeaders: Record<string, string> = {
+      'User-Agent': (req.headers?.['user-agent'] as string) || 'AzaleaCloud/1.0',
+    };
+
+    const contentType = req.headers?.['content-type'];
+    if (contentType && typeof contentType === 'string') {
+      proxyHeaders['Content-Type'] = contentType;
     }
+
+    const cookie = req.headers?.['cookie'];
+    if (cookie && typeof cookie === 'string') {
+      proxyHeaders['Cookie'] = cookie;
+    }
+
+    // Prepare body
+    let requestBody: string | undefined = undefined;
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      if (req.body !== undefined && req.body !== null) {
+        if (typeof req.body === 'string') {
+          requestBody = req.body;
+        } else {
+          try {
+            requestBody = JSON.stringify(req.body);
+          } catch {
+            requestBody = String(req.body);
+          }
+        }
+      }
+    }
+
+    // Forward request
+    const proxyResponse = await fetch(targetUrl, {
+      method: req.method || 'GET',
+      headers: proxyHeaders,
+      body: requestBody,
+    });
 
     // Get response data
-    const contentType = proxyResponse.headers.get('content-type') || '';
-    const isJson = contentType.includes('application/json');
-    let data: any;
-    
+    const responseContentType = proxyResponse.headers.get('content-type') || '';
+    const isJson = responseContentType.includes('application/json');
+    let responseData: any;
+
     try {
-      data = isJson ? await proxyResponse.json() : await proxyResponse.text();
-    } catch (err) {
-      // If parsing fails, try to get as text
+      responseData = isJson ? await proxyResponse.json() : await proxyResponse.text();
+    } catch {
       try {
-        data = await proxyResponse.text();
-      } catch (textError) {
-        console.error('Failed to read response:', textError);
-        sendResponse(502, {
-          error: 'Failed to read response from Cloud Shell',
-        });
-        return;
+        responseData = await proxyResponse.text();
+      } catch {
+        return res.status(502).json({ error: 'Failed to read response from Cloud Shell' });
       }
     }
-    
-    // Forward response headers (except CORS and security headers)
-    if (!responseSent) {
-      proxyResponse.headers.forEach((value, key) => {
-        const lowerKey = key.toLowerCase();
-        if (!['access-control-allow-origin', 'x-frame-options', 'content-security-policy', 'content-encoding', 'transfer-encoding'].includes(lowerKey)) {
-          try {
-            res.setHeader(key, value);
-          } catch (headerError) {
-            // Ignore header setting errors (e.g., invalid header values)
-            console.warn(`Failed to set header ${key}:`, headerError);
-          }
+
+    // Forward headers
+    proxyResponse.headers.forEach((value, key) => {
+      const lowerKey = key.toLowerCase();
+      if (!['access-control-allow-origin', 'content-encoding', 'transfer-encoding'].includes(lowerKey)) {
+        try {
+          res.setHeader(key, value);
+        } catch {
+          // Ignore header errors
         }
-      });
-
-      // Set content type explicitly
-      if (isJson) {
-        res.setHeader('Content-Type', 'application/json');
       }
+    });
 
-      sendTextResponse(proxyResponse.status, isJson ? JSON.stringify(data) : data);
+    // Send response
+    if (isJson) {
+      return res.status(proxyResponse.status).json(responseData);
+    } else {
+      return res.status(proxyResponse.status).send(responseData);
     }
-    return;
+
   } catch (error) {
     console.error('Cloud Shell proxy error:', error);
-    // Always return a response, even on error
-    if (!responseSent && !res.headersSent) {
-      try {
-        responseSent = true;
-        res.status(500).json({
-          error: {
-            code: '500',
-            message: error instanceof Error ? error.message : 'A server error has occurred',
-          },
-        });
-      } catch (sendError) {
-        console.error('Failed to send error response:', sendError);
-        try {
-          if (!res.headersSent) {
-            res.status(500).end();
-          }
-        } catch (finalError) {
-          console.error('Failed to end response:', finalError);
-        }
-      }
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: {
+          code: '500',
+          message: error instanceof Error ? error.message : 'A server error has occurred',
+        },
+      });
     }
-    return;
   }
 }
-
