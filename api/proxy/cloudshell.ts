@@ -77,24 +77,6 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // For 401 responses, check if there's an OAuth redirect in WWW-Authenticate or Location header
-    if (proxyResponse.status === 401) {
-      const location = proxyResponse.headers.get('location');
-      const wwwAuthenticate = proxyResponse.headers.get('www-authenticate');
-      
-      // If there's a location header pointing to OAuth, forward it
-      if (location && (location.includes('accounts.google.com') || location.includes('oauth2'))) {
-        res.setHeader('Location', location);
-        res.status(302).end();
-      return;
-    }
-
-      // Forward WWW-Authenticate header if present
-      if (wwwAuthenticate) {
-        res.setHeader('WWW-Authenticate', wwwAuthenticate);
-      }
-    }
-
     const contentType = proxyResponse.headers.get('content-type') || '';
     const isJson = contentType.includes('application/json');
     let data;
@@ -108,6 +90,37 @@ module.exports = async function handler(req, res) {
       } catch {
         data = '';
       }
+    }
+
+    // For 401 responses, check if there's an OAuth redirect in WWW-Authenticate or Location header
+    // IMPORTANT: We need to forward the response body AND headers so Cloud Shell can detect the auth challenge
+    if (proxyResponse.status === 401) {
+      const location = proxyResponse.headers.get('location');
+      const wwwAuthenticate = proxyResponse.headers.get('www-authenticate');
+      
+      // If there's a location header pointing to OAuth, forward it as a redirect
+      if (location && (location.includes('accounts.google.com') || location.includes('oauth2'))) {
+        res.setHeader('Location', location);
+        res.status(302).end();
+        return;
+      }
+      
+      // Forward WWW-Authenticate header if present (Cloud Shell uses this to detect auth requirements)
+      if (wwwAuthenticate) {
+        res.setHeader('WWW-Authenticate', wwwAuthenticate);
+      }
+      
+      // Ensure CORS headers are set for 401 responses
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Expose-Headers', 'WWW-Authenticate, Location, Set-Cookie');
+      
+      // Send the 401 response with body (Cloud Shell needs this to trigger OAuth)
+      if (isJson && typeof data === 'object') {
+        res.status(401).json(data);
+      } else {
+        res.status(401).send(data || 'Unauthorized');
+      }
+      return;
     }
     
     // Forward response headers (except problematic ones)
@@ -150,13 +163,7 @@ module.exports = async function handler(req, res) {
       }
     });
 
-    // For 401 responses, ensure proper CORS headers so browser can handle OAuth redirect
-    if (proxyResponse.status === 401) {
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-      res.setHeader('Access-Control-Expose-Headers', 'WWW-Authenticate, Location, Set-Cookie');
-    }
-
-    // Send response
+    // Send response (401s are handled above)
     if (isJson && typeof data === 'object') {
       res.status(proxyResponse.status).json(data);
     } else {
