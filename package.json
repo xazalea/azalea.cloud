@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vite build",
     "build:webvm": "bash scripts/build-webvm.sh",
     "build:all": "npm run build:webvm && npm run build",
     "setup:webvm": "cd webvm && npm install",

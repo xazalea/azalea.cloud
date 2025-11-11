@@ -17,6 +17,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist", "src/app"]
+  "include": ["src/**/*", "api/**/*"],
+  "exclude": ["node_modules", "dist", "src/app", "**/app/**", "**/next.config.*", "**/tailwind.config.ts", "webvm"]
 }
