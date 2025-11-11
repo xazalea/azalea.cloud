@@ -28,12 +28,11 @@ export class APIFallbackError extends Error {
    */
   getUserMessage(): string {
     if (!this.webvmAvailable) {
-      return `❌ API Error: ${this.message}\n\n` +
-             `The request to ${this.originalUrl} failed, and WebVM backend is not available as a fallback.\n\n` +
-             `Please ensure:\n` +
-             `1. WebVM is running\n` +
-             `2. Backend server is started on port 3001\n` +
-             `3. Check the browser console for more details`;
+      // WebVM is optional - don't make it sound like a critical error
+      return `⚠️ API Error: ${this.message}\n\n` +
+             `The request to ${this.originalUrl} failed.\n` +
+             `WebVM backend is not available as a fallback (this is optional).\n\n` +
+             `Note: This is expected if WebVM is not running. The application will continue to work with Vercel APIs.`;
     }
 
     if (this.vercelStatus === 500) {
@@ -42,7 +41,7 @@ export class APIFallbackError extends Error {
              `Error details: ${this.message}`;
     }
 
-    return `❌ API Error: ${this.message}\n\n` +
+    return `⚠️ API Error: ${this.message}\n\n` +
            `Request URL: ${this.originalUrl}\n` +
            `Status: ${this.vercelStatus || 'Network Error'}`;
   }
@@ -77,9 +76,7 @@ export async function fetchWithFallback(
     
     // If Vercel returns 500, try WebVM fallback
     if (response.status === 500) {
-      console.warn(`[API Fallback] ⚠️ Vercel returned 500 for ${url}, attempting WebVM fallback...`);
-      
-      // Ensure WebVM is available (with retry)
+      // Ensure WebVM is available (quick check)
       const webvmAvailable = await isWebVMBackendAvailable();
       
       if (webvmAvailable) {
@@ -88,7 +85,6 @@ export async function fetchWithFallback(
         
         if (webvmUrl) {
           try {
-            console.log(`[API Fallback] 🔄 Trying WebVM fallback: ${webvmUrl}`);
             const webvmResponse = await fetch(webvmUrl, options);
             
             if (webvmResponse.ok) {
@@ -96,49 +92,21 @@ export async function fetchWithFallback(
               console.log(`[API Fallback] ✅ WebVM fallback succeeded for ${url} (${duration}ms)`);
               return webvmResponse;
             } else {
-              // WebVM returned an error status
-              const error = new APIFallbackError(
-                `WebVM fallback returned status ${webvmResponse.status}`,
-                url,
-                500,
-                true
-              );
-              console.error(`[API Fallback] ❌ ${error.getUserMessage()}`);
-              throw error;
+              // WebVM returned an error status - log but return original 500
+              console.warn(`[API Fallback] ⚠️ WebVM fallback returned ${webvmResponse.status} for ${url}`);
+              return response; // Return original 500
             }
           } catch (webvmError) {
-            const error = new APIFallbackError(
-              `WebVM fallback failed: ${webvmError instanceof Error ? webvmError.message : 'Unknown error'}`,
-              url,
-              500,
-              true,
-              webvmError instanceof Error ? webvmError : undefined
-            );
-            console.error(`[API Fallback] ❌ ${error.getUserMessage()}`);
-            throw error;
+            // WebVM fallback failed - log but return original 500
+            console.warn(`[API Fallback] ⚠️ WebVM fallback failed for ${url}:`, webvmError instanceof Error ? webvmError.message : 'Unknown error');
+            return response; // Return original 500
           }
-        } else {
-          // No WebVM mapping available for this URL
-          const error = new APIFallbackError(
-            `No WebVM fallback available for this endpoint`,
-            url,
-            500,
-            webvmAvailable
-          );
-          console.error(`[API Fallback] ❌ ${error.getUserMessage()}`);
-          throw error;
         }
-      } else {
-        // WebVM not available
-        const error = new APIFallbackError(
-          `Vercel API returned 500 and WebVM backend is not available`,
-          url,
-          500,
-          false
-        );
-        console.error(`[API Fallback] ❌ ${error.getUserMessage()}`);
-        throw error;
       }
+      
+      // WebVM not available or no mapping - return 500 response
+      // Don't log - this is expected when WebVM isn't running
+      return response;
     }
     
     // Success or non-500 error - return as-is
@@ -154,56 +122,26 @@ export async function fetchWithFallback(
     }
     
     // If fetch itself fails (network error), try WebVM
-    console.warn(`[API Fallback] ⚠️ Vercel fetch failed for ${url}, attempting WebVM fallback...`);
-    console.error(`[API Fallback] Error:`, error);
-    
     const webvmAvailable = await isWebVMBackendAvailable();
     if (webvmAvailable) {
       const webvmUrl = mapVercelPathToWebVM(url);
       if (webvmUrl) {
         try {
-          console.log(`[API Fallback] 🔄 Trying WebVM fallback: ${webvmUrl}`);
           const webvmResponse = await fetch(webvmUrl, options);
           
           if (webvmResponse.ok) {
             const duration = Date.now() - startTime;
             console.log(`[API Fallback] ✅ WebVM fallback succeeded for ${url} (${duration}ms)`);
             return webvmResponse;
-          } else {
-            const fallbackError = new APIFallbackError(
-              `WebVM fallback returned status ${webvmResponse.status}`,
-              url,
-              undefined,
-              true,
-              error instanceof Error ? error : undefined
-            );
-            console.error(`[API Fallback] ❌ ${fallbackError.getUserMessage()}`);
-            throw fallbackError;
           }
         } catch (webvmError) {
-          const fallbackError = new APIFallbackError(
-            `WebVM fallback failed: ${webvmError instanceof Error ? webvmError.message : 'Unknown error'}`,
-            url,
-            undefined,
-            true,
-            webvmError instanceof Error ? webvmError : undefined
-          );
-          console.error(`[API Fallback] ❌ ${fallbackError.getUserMessage()}`);
-          throw fallbackError;
+          // WebVM fallback failed - continue to throw original error
         }
       }
     }
     
-    // Both Vercel and WebVM failed
-    const finalError = new APIFallbackError(
-      `Network error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      url,
-      undefined,
-      webvmAvailable,
-      error instanceof Error ? error : undefined
-    );
-    console.error(`[API Fallback] ❌ ${finalError.getUserMessage()}`);
-    throw finalError;
+    // Both Vercel and WebVM failed - throw original error
+    throw error;
   }
 }
 

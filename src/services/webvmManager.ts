@@ -51,13 +51,18 @@ class WebVMManager {
         retryCount: this.status.retryCount + 1,
       };
       
-      console.warn(`[WebVM Manager] Health check failed: ${errorMessage}`);
+      // Don't log health check failures - WebVM is optional
+      // Only log if we've had many failures (indicating it might be needed)
+      if (this.status.retryCount > 10) {
+        console.log(`[WebVM Manager] WebVM backend not available (optional fallback)`);
+      }
       return false;
     }
   }
 
   /**
    * Ensure WebVM backend is available, with retry logic
+   * Returns false gracefully if WebVM is not available (it's optional)
    */
   async ensureAvailable(retries: number = MAX_RETRIES): Promise<boolean> {
     // If already checking, wait for that check to complete
@@ -77,7 +82,7 @@ class WebVMManager {
       return true;
     }
 
-    // Try to check availability
+    // Try to check availability (quick check, no retries)
     let isAvailable = await this.checkAvailability();
     
     if (isAvailable) {
@@ -85,48 +90,13 @@ class WebVMManager {
       return true;
     }
 
-    // If not available, try to initialize
-    console.log('[WebVM Manager] WebVM backend not available, attempting to initialize...');
-    
-    for (let attempt = 0; attempt < retries; attempt++) {
-      try {
-        console.log(`[WebVM Manager] Initialization attempt ${attempt + 1}/${retries}...`);
-        
-        // Try to start WebVM backend
-        const started = await this.attemptStartWebVM();
-        
-        if (started) {
-          // Wait a bit for server to be ready
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          
-          // Verify it's actually running
-          isAvailable = await this.checkAvailability();
-          
-          if (isAvailable) {
-            console.log('[WebVM Manager] ✅ WebVM backend is now available');
-            this.startHealthCheck();
-            return true;
-          }
-        }
-        
-        if (attempt < retries - 1) {
-          console.log(`[WebVM Manager] Retrying in ${RETRY_DELAY / 1000} seconds...`);
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error(`[WebVM Manager] Initialization attempt ${attempt + 1} failed:`, errorMessage);
-        
-        if (attempt < retries - 1) {
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-        }
-      }
+    // WebVM is not available - this is OK, it's optional
+    // Only log at debug level, don't show errors
+    if (retries > 1) {
+      // Only log if we're doing multiple retries (meaning it's actually needed)
+      console.log('[WebVM Manager] WebVM backend not available (optional fallback)');
     }
-
-    // All retries failed
-    const errorMsg = `WebVM backend is not available after ${retries} attempts. Please ensure WebVM is running.`;
-    console.error(`[WebVM Manager] ❌ ${errorMsg}`);
-    this.status.error = errorMsg;
+    
     return false;
   }
 
@@ -179,21 +149,16 @@ class WebVMManager {
 
   /**
    * Get a user-friendly error message
+   * Returns empty string if WebVM is optional (not needed)
    */
   getErrorMessage(): string {
     if (this.status.available) {
       return '';
     }
 
-    if (this.status.error) {
-      return this.status.error;
-    }
-
-    if (this.status.retryCount > 0) {
-      return `WebVM backend is not available (${this.status.retryCount} failed attempts). Please ensure WebVM is running and the backend server is started on port 3001.`;
-    }
-
-    return 'WebVM backend is not available. Please ensure WebVM is running.';
+    // WebVM is optional - only show error if it was actually needed
+    // For now, return empty string to indicate it's optional
+    return '';
   }
 }
 

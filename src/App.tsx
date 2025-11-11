@@ -39,14 +39,13 @@ function AppContent() {
   const [desktopUrl, setDesktopUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    // Initialize WebVM manager to ensure backend is always available
-    webvmManager.ensureAvailable(3).then(available => {
+    // Initialize WebVM manager (optional - only check, don't show errors)
+    webvmManager.ensureAvailable(1).then(available => {
       if (available) {
-        console.log('[App] ✅ WebVM backend is available');
+        console.log('[App] ✅ WebVM backend is available (fallback ready)');
       } else {
-        const errorMsg = webvmManager.getErrorMessage();
-        console.warn('[App] ⚠️ WebVM backend not available:', errorMsg);
-        showError('WebVM Backend Not Available', errorMsg);
+        // WebVM is optional - don't show error, just log
+        console.log('[App] ℹ️ WebVM backend not available (optional fallback)');
       }
     });
 
