@@ -8,17 +8,17 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
-) {
-  // CORS headers - set first
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
+): Promise<void> {
   try {
+    // CORS headers - set first
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+
+    if (req.method === 'OPTIONS') {
+      res.status(200).end();
+      return;
+    }
 
     // Get the path from query or from X-Original-URL header
     let targetPath = '';
@@ -60,12 +60,13 @@ export default async function handler(
       return;
     }
 
-    // Check if fetch is available
+    // Check if fetch is available (should always be available in Vercel)
     if (typeof fetch === 'undefined') {
-      return res.status(500).json({
+      res.status(500).json({
         error: 'fetch API not available',
         message: 'Server runtime does not support fetch API',
       });
+      return;
     }
 
     // Get access token for authentication
@@ -118,10 +119,11 @@ export default async function handler(
       url = new URL(targetPath.startsWith('/') ? targetPath : `/${targetPath}`, baseUrl);
     } catch (urlError) {
       console.error('Invalid URL construction:', urlError);
-      return res.status(400).json({
+      res.status(400).json({
         error: 'Invalid URL path',
         message: urlError instanceof Error ? urlError.message : 'Failed to construct URL',
       });
+      return;
     }
 
     // Forward the request to Cloud Shell with proper headers
@@ -158,10 +160,11 @@ export default async function handler(
       });
     } catch (fetchError) {
       console.error('Failed to fetch from Cloud Shell:', fetchError);
-      return res.status(502).json({
+      res.status(502).json({
         error: 'Failed to connect to Cloud Shell',
         message: fetchError instanceof Error ? fetchError.message : 'Unknown error',
       });
+      return;
     }
 
     // Get response data - try JSON first, fallback to text
@@ -182,9 +185,10 @@ export default async function handler(
         data = await proxyResponse.text();
       } catch (textError) {
         console.error('Failed to read response:', textError);
-        return res.status(502).json({
+        res.status(502).json({
           error: 'Failed to read response from Cloud Shell',
         });
+        return;
       }
     }
     
@@ -201,16 +205,16 @@ export default async function handler(
       res.setHeader('Content-Type', 'application/json');
     }
 
-    return res.status(proxyResponse.status).send(isJson ? JSON.stringify(data) : data);
+    res.status(proxyResponse.status).send(isJson ? JSON.stringify(data) : data);
+    return;
   } catch (error) {
     console.error('Proxy error:', error);
     // Always return a response, even on error
     if (!res.headersSent) {
-      return res.status(500).json({
+      res.status(500).json({
         error: error instanceof Error ? error.message : 'Proxy request failed',
       });
     }
-    // If headers already sent, we can't send a response - but this shouldn't happen
     return;
   }
 }

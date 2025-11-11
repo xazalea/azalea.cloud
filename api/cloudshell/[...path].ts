@@ -7,17 +7,17 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
-) {
-  // CORS headers - set first
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
+): Promise<void> {
   try {
+    // CORS headers - set first
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+
+    if (req.method === 'OPTIONS') {
+      res.status(200).end();
+      return;
+    }
     // Get the path from the catch-all route
     const path = req.query.path as string[] | string;
     const pathStr = Array.isArray(path) ? path.join('/') : path || '';
@@ -91,10 +91,11 @@ export default async function handler(
       });
     } catch (fetchError) {
       console.error('Failed to fetch from Cloud Shell:', fetchError);
-      return res.status(502).json({
+      res.status(502).json({
         error: 'Failed to connect to Cloud Shell',
         message: fetchError instanceof Error ? fetchError.message : 'Unknown error',
       });
+      return;
     }
 
     // Get response data
@@ -110,9 +111,10 @@ export default async function handler(
         data = await proxyResponse.text();
       } catch (textError) {
         console.error('Failed to read response:', textError);
-        return res.status(502).json({
+        res.status(502).json({
           error: 'Failed to read response from Cloud Shell',
         });
+        return;
       }
     }
     
@@ -129,16 +131,16 @@ export default async function handler(
       res.setHeader('Content-Type', 'application/json');
     }
 
-    return res.status(proxyResponse.status).send(isJson ? JSON.stringify(data) : data);
+    res.status(proxyResponse.status).send(isJson ? JSON.stringify(data) : data);
+    return;
   } catch (error) {
     console.error('Cloud Shell proxy error:', error);
     // Always return a response, even on error
     if (!res.headersSent) {
-      return res.status(500).json({
+      res.status(500).json({
         error: error instanceof Error ? error.message : 'Proxy request failed',
       });
     }
-    // If headers already sent, we can't send a response - but this shouldn't happen
     return;
   }
 }
