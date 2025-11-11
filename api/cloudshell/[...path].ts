@@ -3,9 +3,18 @@
  * @param {import('@vercel/node').VercelResponse} res
  */
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Allow credentials for cookie-based authentication
+  // Note: When using credentials, we must specify the origin, not '*'
+  const origin = req.headers?.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Cookie');
+  res.setHeader('Access-Control-Expose-Headers', 'Set-Cookie, Location, WWW-Authenticate');
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -53,13 +62,31 @@ module.exports = async function handler(req, res) {
       redirect: 'manual', // Handle redirects manually
     });
 
-    // Handle redirects (3xx status codes)
+    // Handle redirects (3xx status codes) and OAuth redirects in 401 responses
     if (proxyResponse.status >= 300 && proxyResponse.status < 400) {
       const location = proxyResponse.headers.get('location');
       if (location) {
         res.setHeader('Location', location);
         res.status(proxyResponse.status).end();
         return;
+      }
+    }
+
+    // For 401 responses, check if there's an OAuth redirect in WWW-Authenticate or Location header
+    if (proxyResponse.status === 401) {
+      const location = proxyResponse.headers.get('location');
+      const wwwAuthenticate = proxyResponse.headers.get('www-authenticate');
+      
+      // If there's a location header pointing to OAuth, forward it
+      if (location && (location.includes('accounts.google.com') || location.includes('oauth2'))) {
+        res.setHeader('Location', location);
+        res.status(302).end();
+        return;
+      }
+      
+      // Forward WWW-Authenticate header if present
+      if (wwwAuthenticate) {
+        res.setHeader('WWW-Authenticate', wwwAuthenticate);
       }
     }
 
@@ -88,7 +115,22 @@ module.exports = async function handler(req, res) {
         const cookies = proxyResponse.headers.getSetCookie ? proxyResponse.headers.getSetCookie() : [value];
         cookies.forEach(cookie => {
           try {
-            res.appendHeader('Set-Cookie', cookie);
+            // Modify cookie to work with our domain
+            // Remove domain restrictions and adjust SameSite if needed
+            let modifiedCookie = cookie;
+            // Remove domain=... if it restricts to .google.com
+            modifiedCookie = modifiedCookie.replace(/;\s*[Dd]omain=[^;]+/g, '');
+            // Adjust SameSite for cross-origin requests
+            if (modifiedCookie.includes('SameSite=')) {
+              modifiedCookie = modifiedCookie.replace(/;\s*[Ss]ame[Ss]ite=[^;]+/g, '; SameSite=None');
+            } else if (!modifiedCookie.includes('SameSite')) {
+              modifiedCookie += '; SameSite=None';
+            }
+            // Ensure Secure flag for SameSite=None
+            if (modifiedCookie.includes('SameSite=None') && !modifiedCookie.includes('Secure')) {
+              modifiedCookie += '; Secure';
+            }
+            res.appendHeader('Set-Cookie', modifiedCookie);
           } catch {
             // If appendHeader doesn't work, try setHeader
             try {
@@ -102,6 +144,12 @@ module.exports = async function handler(req, res) {
         } catch {}
       }
     });
+
+    // For 401 responses, ensure proper CORS headers so browser can handle OAuth redirect
+    if (proxyResponse.status === 401) {
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Expose-Headers', 'WWW-Authenticate, Location, Set-Cookie');
+    }
 
     // Send response
     if (isJson && typeof data === 'object') {

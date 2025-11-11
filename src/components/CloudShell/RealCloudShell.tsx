@@ -64,6 +64,10 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
    * This matches the behavior expected by Cloud Shell scripts
    */
   const setupCloudShellProxy = (): void => {
+    // Track 401 errors to provide better feedback
+    let authErrorCount = 0;
+    const maxAuthErrors = 5;
+    
     // Intercept fetch requests to Cloud Shell
     const originalFetch = window.fetch;
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -99,6 +103,13 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         }
       }
       
+      // Don't proxy OAuth requests - they need to go directly to Google
+      if (urlStr.includes('accounts.google.com') || 
+          urlStr.includes('oauth2.googleapis.com') ||
+          urlStr.includes('oauth2')) {
+        return originalFetch(input, init);
+      }
+      
       // Proxy ALL requests to shell.cloud.google.com through our backend
       // Also proxy requests to our own domain's /cloudshell/* paths
       if (urlStr.includes('shell.cloud.google.com') || urlStr.includes('/cloudshell/')) {
@@ -116,13 +127,40 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         // Route through our proxy API with WebVM fallback
         const proxyUrl = `/api/proxy/cloudshell?path=${encodeURIComponent(proxyPath.replace(/^\//, ''))}`;
         
-        return apiFallback.get(proxyUrl, {
-          ...init,
-          headers: {
-            ...init?.headers,
-            'X-Original-URL': urlStr.includes('shell.cloud.google.com') ? urlStr : `https://shell.cloud.google.com${proxyPath}`,
-          },
-        });
+        try {
+          const response = await apiFallback.get(proxyUrl, {
+            ...init,
+            headers: {
+              ...init?.headers,
+              'X-Original-URL': urlStr.includes('shell.cloud.google.com') ? urlStr : `https://shell.cloud.google.com${proxyPath}`,
+            },
+          });
+          
+          // Track 401 errors (expected during OAuth flow)
+          if (response.status === 401) {
+            authErrorCount++;
+            // Don't log 401s as errors - they're expected during authentication
+            if (authErrorCount <= maxAuthErrors) {
+              console.log(`[Cloud Shell] Authentication required (${authErrorCount}/${maxAuthErrors}) - OAuth flow will be triggered automatically`);
+            }
+          } else if (response.status < 400) {
+            // Reset counter on successful requests
+            authErrorCount = 0;
+          }
+          
+          return response;
+        } catch (error) {
+          // If it's a 401, it's expected during OAuth - don't treat as error
+          if (error instanceof APIFallbackError && error.status === 401) {
+            authErrorCount++;
+            if (authErrorCount <= maxAuthErrors) {
+              console.log(`[Cloud Shell] Authentication required (${authErrorCount}/${maxAuthErrors}) - OAuth flow will be triggered automatically`);
+            }
+            // Return a response-like object for 401s
+            return new Response(null, { status: 401, statusText: 'Unauthorized' });
+          }
+          throw error;
+        }
       }
       
       return originalFetch(input, init);
@@ -134,6 +172,13 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
     
     XMLHttpRequest.prototype.open = function(method: string, url: string | URL, async?: boolean, username?: string | null, password?: string | null) {
       const urlStr = url.toString();
+      
+      // Don't proxy OAuth requests - they need to go directly to Google
+      if (urlStr.includes('accounts.google.com') || 
+          urlStr.includes('oauth2.googleapis.com') ||
+          urlStr.includes('oauth2')) {
+        return originalXHROpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
+      }
       
       // Proxy ALL Cloud Shell requests - both shell.cloud.google.com and our domain's /cloudshell/*
       if (urlStr.includes('shell.cloud.google.com') || urlStr.includes('/cloudshell/')) {
@@ -412,8 +457,11 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
                 <div style={{ fontSize: '18px', fontWeight: 600, color: theme.text, marginBottom: '8px' }}>
                   Loading Azalea Cloud Shell...
                 </div>
-                <div style={{ fontSize: '14px', color: theme.textSecondary }}>
+                <div style={{ fontSize: '14px', color: theme.textSecondary, marginBottom: '12px' }}>
                   Cloud Shell will handle authentication automatically
+                </div>
+                <div style={{ fontSize: '12px', color: theme.textSecondary, opacity: 0.7, maxWidth: '400px', lineHeight: '1.5' }}>
+                  Note: You may see 401 errors in the console during initial authentication. This is normal - Cloud Shell will automatically open an OAuth popup to complete authentication.
                 </div>
               </>
             )}
