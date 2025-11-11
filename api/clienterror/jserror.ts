@@ -3,28 +3,36 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
-): Promise<void> {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+) {
+  try {
+    // Set CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+    if (req.method === 'OPTIONS') {
+      res.status(200).end();
+      return;
+    }
 
-  // Log error if POST/PUT (silently ignore errors)
-  if (req.method === 'POST' || req.method === 'PUT') {
-    try {
-      console.log('JS Error:', {
-        query: req.query,
-        body: typeof req.body === 'string' ? req.body.substring(0, 200) : req.body,
-      });
-    } catch (e) {
-      // Ignore logging errors
+    // Log error if POST/PUT (silently ignore errors)
+    if (req.method === 'POST' || req.method === 'PUT') {
+      try {
+        console.log('JS Error:', {
+          query: req.query,
+          body: typeof req.body === 'string' ? req.body.substring(0, 200) : req.body,
+        });
+      } catch (e) {
+        // Ignore logging errors
+      }
+    }
+
+    // Always return success
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('JSError API error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ success: true, error: 'Internal server error' });
     }
   }
-
-  // Always return success
-  return res.status(200).json({ success: true });
 }

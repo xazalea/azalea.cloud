@@ -3,17 +3,18 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
-): Promise<void> {
-  // Set CORS headers first
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
+) {
   try {
+    // Set CORS headers first
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+
+    if (req.method === 'OPTIONS') {
+      res.status(200).end();
+      return;
+    }
+
     // Get target path from query parameter
     const pathParam = req.query?.path;
     let targetPath = '';
@@ -27,7 +28,8 @@ export default async function handler(
     }
 
     if (!targetPath) {
-      return res.status(400).json({ error: 'Path parameter required' });
+      res.status(400).json({ error: 'Path parameter required' });
+      return;
     }
 
     // Build target URL
@@ -40,10 +42,11 @@ export default async function handler(
       const url = new URL(cleanPath, baseUrl);
       targetUrl = url.toString();
     } catch (urlError) {
-      return res.status(400).json({ 
+      res.status(400).json({ 
         error: 'Invalid URL path',
         message: urlError instanceof Error ? urlError.message : 'Failed to construct URL'
       });
+      return;
     }
 
     // Prepare headers for proxy request
@@ -99,7 +102,8 @@ export default async function handler(
       try {
         responseData = await proxyResponse.text();
       } catch {
-        return res.status(502).json({ error: 'Failed to read response from Cloud Shell' });
+        res.status(502).json({ error: 'Failed to read response from Cloud Shell' });
+        return;
       }
     }
 
@@ -117,16 +121,16 @@ export default async function handler(
 
     // Send response
     if (isJson) {
-      return res.status(proxyResponse.status).json(responseData);
+      res.status(proxyResponse.status).json(responseData);
     } else {
-      return res.status(proxyResponse.status).send(responseData);
+      res.status(proxyResponse.status).send(responseData);
     }
 
   } catch (error) {
     console.error('Proxy error:', error);
     // Return error response
     if (!res.headersSent) {
-      return res.status(500).json({
+      res.status(500).json({
         error: {
           code: '500',
           message: error instanceof Error ? error.message : 'A server error has occurred',
