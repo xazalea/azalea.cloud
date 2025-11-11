@@ -8,14 +8,13 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
-  // CORS headers
+  // CORS headers - set first
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
 
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return res.status(200).end();
   }
 
   try {
@@ -133,12 +132,14 @@ export default async function handler(
     return res.status(proxyResponse.status).send(isJson ? JSON.stringify(data) : data);
   } catch (error) {
     console.error('Cloud Shell proxy error:', error);
-    // Make sure we haven't already sent a response
+    // Always return a response, even on error
     if (!res.headersSent) {
       return res.status(500).json({
         error: error instanceof Error ? error.message : 'Proxy request failed',
       });
     }
+    // If headers already sent, we can't send a response - but this shouldn't happen
+    return;
   }
 }
 
