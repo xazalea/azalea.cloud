@@ -9,6 +9,27 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<void> {
+  // Ensure we only send one response
+  let responseSent = false;
+  
+  const sendResponse = (status: number, data: any) => {
+    if (responseSent) {
+      console.warn('Attempted to send response twice, ignoring');
+      return;
+    }
+    responseSent = true;
+    res.status(status).json(data);
+  };
+
+  const sendTextResponse = (status: number, data: string) => {
+    if (responseSent) {
+      console.warn('Attempted to send response twice, ignoring');
+      return;
+    }
+    responseSent = true;
+    res.status(status).send(data);
+  };
+
   try {
     // CORS headers - set first
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -36,7 +57,7 @@ export default async function handler(
     } else {
       // Fallback to query parameter
       const { path, ...queryParams } = req.query;
-      targetPath = Array.isArray(path) ? path.join('/') : path || '';
+      targetPath = Array.isArray(path) ? path.join('/') : (path || '');
       
       // Add query parameters to path
       const queryString = new URLSearchParams();
@@ -56,13 +77,13 @@ export default async function handler(
     }
 
     if (!targetPath) {
-      res.status(400).json({ error: 'Path parameter required' });
+      sendResponse(400, { error: 'Path parameter required' });
       return;
     }
 
     // Check if fetch is available (should always be available in Vercel)
     if (typeof fetch === 'undefined') {
-      res.status(500).json({
+      sendResponse(500, {
         error: 'fetch API not available',
         message: 'Server runtime does not support fetch API',
       });
@@ -112,14 +133,27 @@ export default async function handler(
       // Not in GCP - that's okay, expected
     }
 
-    // Build target URL
+    // Build target URL - properly handle path and query string
     const baseUrl = 'https://shell.cloud.google.com';
     let url: URL;
     try {
-      url = new URL(targetPath.startsWith('/') ? targetPath : `/${targetPath}`, baseUrl);
+      // Separate path and query string
+      const [pathPart, queryPart] = targetPath.split('?');
+      const cleanPath = pathPart.startsWith('/') ? pathPart : `/${pathPart}`;
+      
+      // Construct URL with base
+      url = new URL(cleanPath, baseUrl);
+      
+      // Add query string if present
+      if (queryPart) {
+        const params = new URLSearchParams(queryPart);
+        params.forEach((value, key) => {
+          url.searchParams.append(key, value);
+        });
+      }
     } catch (urlError) {
-      console.error('Invalid URL construction:', urlError);
-      res.status(400).json({
+      console.error('Invalid URL construction:', urlError, 'targetPath:', targetPath);
+      sendResponse(400, {
         error: 'Invalid URL path',
         message: urlError instanceof Error ? urlError.message : 'Failed to construct URL',
       });
@@ -160,7 +194,7 @@ export default async function handler(
       });
     } catch (fetchError) {
       console.error('Failed to fetch from Cloud Shell:', fetchError);
-      res.status(502).json({
+      sendResponse(502, {
         error: 'Failed to connect to Cloud Shell',
         message: fetchError instanceof Error ? fetchError.message : 'Unknown error',
       });
@@ -185,7 +219,7 @@ export default async function handler(
         data = await proxyResponse.text();
       } catch (textError) {
         console.error('Failed to read response:', textError);
-        res.status(502).json({
+        sendResponse(502, {
           error: 'Failed to read response from Cloud Shell',
         });
         return;
@@ -193,26 +227,36 @@ export default async function handler(
     }
     
     // Forward response headers (except CORS and security headers)
-    proxyResponse.headers.forEach((value, key) => {
-      const lowerKey = key.toLowerCase();
-      if (!['access-control-allow-origin', 'x-frame-options', 'content-security-policy', 'content-encoding', 'transfer-encoding'].includes(lowerKey)) {
-        res.setHeader(key, value);
+    if (!responseSent) {
+      proxyResponse.headers.forEach((value, key) => {
+        const lowerKey = key.toLowerCase();
+        if (!['access-control-allow-origin', 'x-frame-options', 'content-security-policy', 'content-encoding', 'transfer-encoding'].includes(lowerKey)) {
+          try {
+            res.setHeader(key, value);
+          } catch (headerError) {
+            // Ignore header setting errors (e.g., invalid header values)
+            console.warn(`Failed to set header ${key}:`, headerError);
+          }
+        }
+      });
+
+      // Set content type explicitly based on what we got
+      if (isJson) {
+        res.setHeader('Content-Type', 'application/json');
       }
-    });
 
-    // Set content type explicitly based on what we got
-    if (isJson) {
-      res.setHeader('Content-Type', 'application/json');
+      sendTextResponse(proxyResponse.status, isJson ? JSON.stringify(data) : data);
     }
-
-    res.status(proxyResponse.status).send(isJson ? JSON.stringify(data) : data);
     return;
   } catch (error) {
     console.error('Proxy error:', error);
     // Always return a response, even on error
-    if (!res.headersSent) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Proxy request failed',
+    if (!responseSent && !res.headersSent) {
+      sendResponse(500, {
+        error: {
+          code: '500',
+          message: error instanceof Error ? error.message : 'A server error has occurred',
+        },
       });
     }
     return;

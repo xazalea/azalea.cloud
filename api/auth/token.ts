@@ -9,6 +9,19 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<void> {
+  let responseSent = false;
+  
+  const sendResponse = (status: number, data: any) => {
+    if (responseSent || res.headersSent) {
+      if (!responseSent) {
+        console.warn('Response already sent, ignoring duplicate');
+      }
+      return;
+    }
+    responseSent = true;
+    res.status(status).json(data);
+  };
+
   try {
     // CORS headers - set first
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -21,13 +34,13 @@ export default async function handler(
     }
 
     if (req.method !== 'GET') {
-      res.status(405).json({ error: 'Method not allowed' });
+      sendResponse(405, { error: 'Method not allowed' });
       return;
     }
 
     // Always return null token - Cloud Shell will handle its own authentication
     // We're not running in GCP, so no metadata server token is available
-    res.status(200).json({
+    sendResponse(200, {
       token: null,
       message: 'No token available - Cloud Shell will handle authentication',
     });
@@ -35,13 +48,11 @@ export default async function handler(
   } catch (error) {
     console.error('Error getting token:', error);
     // Always return a response, even on error
-    if (!res.headersSent) {
-      res.status(200).json({
-        token: null,
-        message: 'No token available - Cloud Shell will handle authentication',
-        error: error instanceof Error ? error.message : 'Failed to get token',
-      });
-    }
+    sendResponse(200, {
+      token: null,
+      message: 'No token available - Cloud Shell will handle authentication',
+      error: error instanceof Error ? error.message : 'Failed to get token',
+    });
     return;
   }
 }

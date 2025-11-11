@@ -9,6 +9,19 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<void> {
+  let responseSent = false;
+  
+  const sendResponse = (status: number, data: any) => {
+    if (responseSent || res.headersSent) {
+      if (!responseSent) {
+        console.warn('Response already sent, ignoring duplicate');
+      }
+      return;
+    }
+    responseSent = true;
+    res.status(status).json(data);
+  };
+
   try {
     // CORS headers - set first
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -21,13 +34,13 @@ export default async function handler(
     }
 
     if (req.method !== 'GET') {
-      res.status(405).json({ error: 'Method not allowed' });
+      sendResponse(405, { error: 'Method not allowed' });
       return;
     }
 
     // Always return false for now - we're not in GCP
     // This endpoint is mainly for checking, and we can safely assume false
-    res.status(200).json({
+    sendResponse(200, {
       isCloudEnvironment: false,
     });
     return;
@@ -35,12 +48,10 @@ export default async function handler(
     // Catch any errors at any level
     console.error('Environment check error:', error);
     // Always return a response, even on error
-    if (!res.headersSent) {
-      res.status(200).json({
-        isCloudEnvironment: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
+    sendResponse(200, {
+      isCloudEnvironment: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
     return;
   }
 }

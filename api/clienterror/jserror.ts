@@ -8,6 +8,19 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<void> {
+  let responseSent = false;
+  
+  const sendResponse = (status: number, data: any) => {
+    if (responseSent || res.headersSent) {
+      if (!responseSent) {
+        console.warn('Response already sent, ignoring duplicate');
+      }
+      return;
+    }
+    responseSent = true;
+    res.status(status).json(data);
+  };
+
   try {
     // CORS headers - set first
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -21,25 +34,28 @@ export default async function handler(
 
     // Log the error (in production, you'd want to send this to a logging service)
     if (req.method === 'POST' || req.method === 'PUT') {
-      console.log('JavaScript error reported:', {
-        query: req.query,
-        body: req.body,
-        method: req.method,
-      });
+      try {
+        console.log('JavaScript error reported:', {
+          query: req.query,
+          body: req.body,
+          method: req.method,
+        });
+      } catch (logError) {
+        // Ignore logging errors
+        console.warn('Failed to log error:', logError);
+      }
     }
 
     // Always return success - we've logged it (or it's a GET request)
-    res.status(200).json({ success: true });
+    sendResponse(200, { success: true });
     return;
   } catch (error) {
     console.error('Error in jserror handler:', error);
     // Always return a response, even on error
-    if (!res.headersSent) {
-      res.status(200).json({ 
-        success: true,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
+    sendResponse(200, { 
+      success: true,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
     return;
   }
 }
