@@ -1,6 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
-module.exports = async function handler(req: VercelRequest, res: VercelResponse) {
+/**
+ * @param {import('@vercel/node').VercelRequest} req
+ * @param {import('@vercel/node').VercelResponse} res
+ */
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
@@ -16,8 +18,8 @@ module.exports = async function handler(req: VercelRequest, res: VercelResponse)
     const targetPath = pathStr ? `/${pathStr}` : '/';
     const targetUrl = new URL(targetPath, 'https://shell.cloud.google.com').toString();
 
-    const proxyHeaders: Record<string, string> = {
-      'User-Agent': (req.headers?.['user-agent'] as string) || 'AzaleaCloud/1.0',
+    const proxyHeaders = {
+      'User-Agent': (req.headers?.['user-agent'] || 'AzaleaCloud/1.0'),
     };
 
     if (req.headers?.['content-type']) {
@@ -27,7 +29,7 @@ module.exports = async function handler(req: VercelRequest, res: VercelResponse)
       proxyHeaders['Cookie'] = String(req.headers['cookie']);
     }
 
-    let body: string | undefined = undefined;
+    let body = undefined;
     if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
       body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
     }

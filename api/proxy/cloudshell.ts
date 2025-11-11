@@ -1,6 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
-module.exports = async function handler(req: VercelRequest, res: VercelResponse) {
+/**
+ * @param {import('@vercel/node').VercelRequest} req
+ * @param {import('@vercel/node').VercelResponse} res
+ */
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
@@ -21,9 +23,9 @@ module.exports = async function handler(req: VercelRequest, res: VercelResponse)
     const cleanPath = targetPath.startsWith('/') ? targetPath : `/${targetPath}`;
     const targetUrl = new URL(cleanPath, 'https://shell.cloud.google.com').toString();
 
-    const proxyHeaders: Record<string, string> = {
-      'User-Agent': (req.headers?.['user-agent'] as string) || 'Mozilla/5.0',
-      'Accept': (req.headers?.['accept'] as string) || 'application/json',
+    const proxyHeaders = {
+      'User-Agent': (req.headers?.['user-agent'] || 'Mozilla/5.0'),
+      'Accept': (req.headers?.['accept'] || 'application/json'),
     };
 
     if (req.headers?.['content-type']) {
@@ -33,7 +35,7 @@ module.exports = async function handler(req: VercelRequest, res: VercelResponse)
       proxyHeaders['Cookie'] = String(req.headers['cookie']);
     }
 
-    let body: string | undefined = undefined;
+    let body = undefined;
     if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
       body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
     }
