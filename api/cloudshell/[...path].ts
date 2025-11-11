@@ -12,31 +12,31 @@ module.exports = async function handler(req, res) {
   } else {
     res.setHeader('Access-Control-Allow-Origin', '*');
   }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Cookie');
   res.setHeader('Access-Control-Expose-Headers', 'Set-Cookie, Location, WWW-Authenticate');
 
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
+    if (req.method === 'OPTIONS') {
+      res.status(200).end();
+      return;
+    }
 
   try {
     const path = req.query.path;
     const pathStr = Array.isArray(path) ? path.join('/') : (path ? String(path) : '');
     const targetPath = pathStr ? `/${pathStr}` : '/';
     const targetUrl = new URL(targetPath, 'https://shell.cloud.google.com').toString();
-
+        
     const proxyHeaders = {
       'User-Agent': (req.headers?.['user-agent'] || 'AzaleaCloud/1.0'),
       'Accept': (req.headers?.['accept'] || 'application/json, text/plain, */*'),
       'Accept-Language': (req.headers?.['accept-language'] || 'en-US,en;q=0.9'),
     };
-
+    
     // Forward important headers
     if (req.headers?.['content-type']) {
       proxyHeaders['Content-Type'] = String(req.headers['content-type']);
-    }
+        }
     if (req.headers?.['cookie']) {
       proxyHeaders['Cookie'] = String(req.headers['cookie']);
     }
@@ -81,9 +81,9 @@ module.exports = async function handler(req, res) {
       if (location && (location.includes('accounts.google.com') || location.includes('oauth2'))) {
         res.setHeader('Location', location);
         res.status(302).end();
-        return;
-      }
-      
+      return;
+    }
+
       // Forward WWW-Authenticate header if present
       if (wwwAuthenticate) {
         res.setHeader('WWW-Authenticate', wwwAuthenticate);
@@ -104,7 +104,7 @@ module.exports = async function handler(req, res) {
         data = '';
       }
     }
-
+    
     // Forward response headers (except problematic ones)
     // IMPORTANT: Forward Set-Cookie for authentication to work
     proxyResponse.headers.forEach((value, key) => {
@@ -140,7 +140,7 @@ module.exports = async function handler(req, res) {
         });
       } else if (!['access-control-allow-origin', 'content-encoding', 'transfer-encoding', 'content-length'].includes(lowerKey)) {
         try {
-          res.setHeader(key, value);
+        res.setHeader(key, value);
         } catch {}
       }
     });

@@ -110,6 +110,11 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         return originalFetch(input, init);
       }
       
+      // Don't proxy CSP (Content Security Policy) reporting endpoint
+      if (urlStr.includes('csp.withgoogle.com')) {
+        return originalFetch(input, init);
+      }
+      
       // Proxy ALL requests to shell.cloud.google.com through our backend
       // Also proxy requests to our own domain's /cloudshell/* paths
       if (urlStr.includes('shell.cloud.google.com') || urlStr.includes('/cloudshell/')) {
@@ -129,12 +134,12 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         
         try {
           const response = await apiFallback.get(proxyUrl, {
-            ...init,
-            headers: {
-              ...init?.headers,
-              'X-Original-URL': urlStr.includes('shell.cloud.google.com') ? urlStr : `https://shell.cloud.google.com${proxyPath}`,
-            },
-          });
+          ...init,
+          headers: {
+            ...init?.headers,
+            'X-Original-URL': urlStr.includes('shell.cloud.google.com') ? urlStr : `https://shell.cloud.google.com${proxyPath}`,
+          },
+        });
           
           // Track 401 errors (expected during OAuth flow)
           if (response.status === 401) {
@@ -151,7 +156,7 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
           return response;
         } catch (error) {
           // If it's a 401, it's expected during OAuth - don't treat as error
-          if (error instanceof APIFallbackError && error.status === 401) {
+          if (error instanceof APIFallbackError && error.vercelStatus === 401) {
             authErrorCount++;
             if (authErrorCount <= maxAuthErrors) {
               console.log(`[Cloud Shell] Authentication required (${authErrorCount}/${maxAuthErrors}) - OAuth flow will be triggered automatically`);
@@ -177,6 +182,11 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
       if (urlStr.includes('accounts.google.com') || 
           urlStr.includes('oauth2.googleapis.com') ||
           urlStr.includes('oauth2')) {
+        return originalXHROpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
+      }
+      
+      // Don't proxy CSP (Content Security Policy) reporting endpoint
+      if (urlStr.includes('csp.withgoogle.com')) {
         return originalXHROpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
       }
       
@@ -324,45 +334,10 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
       googleMaterialIconsLink.href = 'https://fonts.googleapis.com/css?family=Google+Material+Icons';
       document.head.appendChild(googleMaterialIconsLink);
 
-      // Set up Cloud Shell server variables (CSH_SERVER_VARS)
-      // This is the encoded server configuration from shell.html
-      // We'll use a simplified version that works with authentication
-      const serverVars = JSON.stringify([
-        [
-          (window as any).azaleaCloudToken ? 'authenticated@azalea.cloud' : 'user@azalea.cloud',
-          '0',
-          'Azalea',
-          'Cloud'
-        ],
-        [
-          'https://shell.cloud.google.com',
-          'https://cloudshell.clients6.google.com',
-          'cloud-sshrelay-server_20251105.01_RC00',
-          null,
-          '618104708054-9r9s1c4alg36erliucho9t52n32n6dgq.apps.googleusercontent.com',
-          'AIzaSyBj8JySZNOCTBCnK2w-CHlwJnpwcQkQ7Hk',
-          'https://cloudresourcemanager.clients6.google.com',
-          [null, null, null, 'https://www.gstatic.com/devops/connect/loader/tool_library.js'],
-          'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/drive',
-          60,
-          'https://workstations.googleapis.com'
-        ],
-        [null, null, null, null, null, null, [], null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, 1, null, null, 1, null, null, null, null, 1, null, null, null, null, 1, null, 1, null, null, 1, null, null, 1, 1, 1, null, 1, 1, 1, null, null, 1, null, null, null, null, 1],
-        null,
-        [],
-        [
-          ['gcr.io/cloudshell-images/cloudshell:latest', 'gcr.io/cloudrun/button:latest', 'gcr.io/ds-artifacts-cloudshell/deploystack_custom_image'],
-          ['github.com/google/', 'github.com/googlestaging/', 'github.com/googleapis/', 'github.com/googlecloudplatform/', 'github.com/googlemaps/', 'github.com/googleworkspace/', 'github.com/terraform-google-modules/', 'go.googlesource.com/'],
-          ['github.com/GoogleContainerTools/skaffold']
-        ],
-        [],
-        []
-      ]);
-
       // Set CSH_SERVER_VARS (Cloud Shell server variables)
-      // Use the EXACT same format as shell.html
-      // Keep shell.cloud.google.com as the base URL - our proxy will intercept
-      (window as any).CSH_SERVER_VARS = serverVars;
+      // Use the EXACT same encoded string from shell.html
+      // This is the actual server configuration that Cloud Shell expects
+      (window as any).CSH_SERVER_VARS = "\x5b\x5b\x22mynameisrohanandthisismyemail@gmail.com\x22,\x220\x22,\x22Rohan\x22,\x22Salem\x22\x5d,\x5b\x22https:\/\/shell.cloud.google.com\x22,\x22https:\/\/cloudshell.clients6.google.com\x22,\x22cloud-sshrelay-server_20251105.01_RC00\x22,null,\x22618104708054-9r9s1c4alg36erliucho9t52n32n6dgq.apps.googleusercontent.com\x22,\x22AIzaSyBj8JySZNOCTBCnK2w-CHlwJnpwcQkQ7Hk\x22,\x22https:\/\/cloudresourcemanager.clients6.google.com\x22,\x5bnull,null,null,\x22https:\/\/www.gstatic.com\/devops\/connect\/loader\/tool_library.js\x22\x5d,\x22https:\/\/www.googleapis.com\/auth\/userinfo.email https:\/\/www.googleapis.com\/auth\/userinfo.profile https:\/\/www.googleapis.com\/auth\/cloud-platform https:\/\/www.googleapis.com\/auth\/drive\x22,60,\x22https:\/\/workstations.googleapis.com\x22\x5d,\x5bnull,null,null,null,null,null,\x5b\x5bnull,102163142\x5d,\x5bnull,102162558\x5d,\x5bnull,115965161\x5d,\x5bnull,70980719\x5d,\x5bnull,71639050\x5d,\x5bnull,44537330\x5d,\x5bnull,44536920\x5d,\x5bnull,18800188\x5d,\x5bnull,103035570\x5d,\x5bnull,105075601\x5d,\x5bnull,44490095\x5d\x5d,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,1,null,null,1,null,null,null,null,1,null,null,null,null,1,null,1,null,null,1,null,null,1,1,1,null,1,1,1,null,null,1,null,null,null,null,1\x5d,null,\x5b\x5b\x22xtemp.xemail@gmail.com\x22,\x221\x22,\x22Temp\x22\x5d,\x5b\x22incogito.acc@gmail.com\x22,\x222\x22,\x22Incog\x22\x5d,\x5b\x22rndm.grpe@gmail.com\x22,\x223\x22,\x22Rohan\x22\x5d,\x5b\x22rohansalemisapro@gmail.com\x22,\x224\x22,\x22rohan\x22,\x22salem\x22\x5d,\x5b\x22rohansalem8@gmail.com\x22,\x225\x22,\x22Rohan\x22,\x22Salem\x22\x5d,\x5b\x22rndm.ptato@gmail.com\x22,\x226\x22,\x22Potato\x22\x5d\x5d,\x5b\x5b\x22gcr.io\/cloudshell-images\/cloudshell:latest\x22,\x22gcr.io\/cloudrun\/button:latest\x22,\x22gcr.io\/ds-artifacts-cloudshell\/deploystack_custom_image\x22\x5d,\x5b\x22github.com\/google\/\x22,\x22github.com\/googlestaging\/\x22,\x22github.com\/googleapis\/\x22,\x22github.com\/googlecloudplatform\/\x22,\x22github.com\/googlemaps\/\x22,\x22github.com\/googleworkspace\/\x22,\x22github.com\/terraform-google-modules\/\x22,\x22go.googlesource.com\/\x22\x5d,\x5b\x22github.com\/GoogleContainerTools\/skaffold\x22\x5d\x5d,\x5b\x5d,\x5b\x5b\x22github.com\/OnlineHacKing\/\x22,\x22github.com\/Bhaviktutorials\/\x22,\x22github.com\/sherlock-project\/\x22,\x22github.com\/htr-tech\/zphisher\/\x22,\x22github.com\/soxoj\/maigret\/\x22,\x22github.com\/fikrado\/\x22\x5d,\x5b\x22github.com\/JoelGMSec\/Cloudtopolis\x22\x5d\x5d\x5d";
       (window as any).CSH_LOAD_T0 = Date.now();
 
       // Define _DumpException function (required by Cloud Shell)
@@ -374,18 +349,31 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
       // MUST be set up BEFORE Cloud Shell scripts load
       setupCloudShellProxy();
 
+      // Set base href (required by Cloud Shell)
+      const baseElement = document.querySelector('base');
+      if (!baseElement) {
+        const base = document.createElement('base');
+        base.href = '/';
+        document.head.insertBefore(base, document.head.firstChild);
+      }
+
       // Load the main Cloud Shell script from gstatic
+      // This is the exact same script URL from shell.html
       const script = document.createElement('script');
       script.src = 'https://www.gstatic.com/_/cloudshell-scs/_/js/k=cloudshell-scs.csh.en.AYpRfyRWRGQ.es5.O/am=AAAD/d=1/rs=AKpenNb23Sc0ShEzLJnDAJFR8jOOG-NU6A/m=cloudshell';
-      script.async = true;
+      script.async = false; // Load synchronously to ensure proper initialization order
       script.onload = () => {
         (window as any).CSH_LOAD_T1 = Date.now();
         console.log('Azalea Cloud Shell loaded (using real Google Cloud Shell scripts)');
         console.log('API requests will be proxied through Azalea backend');
         
-        resolve();
+        // Give Cloud Shell a moment to initialize
+        setTimeout(() => {
+          resolve();
+        }, 500);
       };
-      script.onerror = () => {
+      script.onerror = (error) => {
+        console.error('Failed to load Cloud Shell scripts:', error);
         reject(new Error('Failed to load Cloud Shell scripts'));
       };
       document.head.appendChild(script);
