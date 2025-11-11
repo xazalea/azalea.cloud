@@ -79,9 +79,24 @@ module.exports = async function handler(req, res) {
     }
 
     // Forward response headers (except problematic ones)
+    // IMPORTANT: Forward Set-Cookie for authentication to work
     proxyResponse.headers.forEach((value, key) => {
       const lowerKey = key.toLowerCase();
-      if (!['access-control-allow-origin', 'content-encoding', 'transfer-encoding', 'content-length'].includes(lowerKey)) {
+      // Always forward Set-Cookie for authentication
+      if (lowerKey === 'set-cookie') {
+        // Set-Cookie can be an array, handle it properly
+        const cookies = proxyResponse.headers.getSetCookie ? proxyResponse.headers.getSetCookie() : [value];
+        cookies.forEach(cookie => {
+          try {
+            res.appendHeader('Set-Cookie', cookie);
+          } catch {
+            // If appendHeader doesn't work, try setHeader
+            try {
+              res.setHeader('Set-Cookie', cookie);
+            } catch {}
+          }
+        });
+      } else if (!['access-control-allow-origin', 'content-encoding', 'transfer-encoding', 'content-length'].includes(lowerKey)) {
         try {
           res.setHeader(key, value);
         } catch {}
