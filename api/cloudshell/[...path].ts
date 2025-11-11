@@ -20,13 +20,25 @@ module.exports = async function handler(req, res) {
 
     const proxyHeaders = {
       'User-Agent': (req.headers?.['user-agent'] || 'AzaleaCloud/1.0'),
+      'Accept': (req.headers?.['accept'] || 'application/json, text/plain, */*'),
+      'Accept-Language': (req.headers?.['accept-language'] || 'en-US,en;q=0.9'),
     };
 
+    // Forward important headers
     if (req.headers?.['content-type']) {
       proxyHeaders['Content-Type'] = String(req.headers['content-type']);
     }
     if (req.headers?.['cookie']) {
       proxyHeaders['Cookie'] = String(req.headers['cookie']);
+    }
+    if (req.headers?.['authorization']) {
+      proxyHeaders['Authorization'] = String(req.headers['authorization']);
+    }
+    if (req.headers?.['referer']) {
+      proxyHeaders['Referer'] = String(req.headers['referer']);
+    }
+    if (req.headers?.['origin']) {
+      proxyHeaders['Origin'] = String(req.headers['origin']);
     }
 
     let body = undefined;
@@ -38,21 +50,46 @@ module.exports = async function handler(req, res) {
       method: req.method || 'GET',
       headers: proxyHeaders,
       body,
+      redirect: 'manual', // Handle redirects manually
     });
+
+    // Handle redirects (3xx status codes)
+    if (proxyResponse.status >= 300 && proxyResponse.status < 400) {
+      const location = proxyResponse.headers.get('location');
+      if (location) {
+        res.setHeader('Location', location);
+        res.status(proxyResponse.status).end();
+        return;
+      }
+    }
 
     const contentType = proxyResponse.headers.get('content-type') || '';
     const isJson = contentType.includes('application/json');
-    const data = isJson ? await proxyResponse.json() : await proxyResponse.text();
+    let data;
+    
+    try {
+      data = isJson ? await proxyResponse.json() : await proxyResponse.text();
+    } catch (e) {
+      // If parsing fails, try as text
+      try {
+        data = await proxyResponse.text();
+      } catch {
+        data = '';
+      }
+    }
 
+    // Forward response headers (except problematic ones)
     proxyResponse.headers.forEach((value, key) => {
-      if (!['access-control-allow-origin', 'content-encoding'].includes(key.toLowerCase())) {
+      const lowerKey = key.toLowerCase();
+      if (!['access-control-allow-origin', 'content-encoding', 'transfer-encoding', 'content-length'].includes(lowerKey)) {
         try {
           res.setHeader(key, value);
         } catch {}
       }
     });
 
-    if (isJson) {
+    // Send response
+    if (isJson && typeof data === 'object') {
       res.status(proxyResponse.status).json(data);
     } else {
       res.status(proxyResponse.status).send(data);
