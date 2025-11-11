@@ -243,10 +243,7 @@ function mapVercelPathToWebVM(vercelUrl: string): string | null {
   }
 }
 
-/**
- * Exported fetchWithFallback for use in interceptors
- */
-export { fetchWithFallback, APIFallbackError };
+// fetchWithFallback and APIFallbackError are already exported above
 
 /**
  * Convenience wrapper for common API calls with error handling

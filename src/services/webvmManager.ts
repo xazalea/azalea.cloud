@@ -150,7 +150,7 @@ class WebVMManager {
   /**
    * Start periodic health checks
    */
-  private startHealthCheck(): void {
+  startHealthCheck(): void {
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
     }
