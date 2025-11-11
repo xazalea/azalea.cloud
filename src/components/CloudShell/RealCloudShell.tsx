@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTheme } from '../../theme/theme';
-import { CloudShellAuthInterceptor } from '../../services/cloudShellAuthInterceptor';
 import { apiFallback, fetchWithFallback, APIFallbackError } from '../../services/apiFallbackService';
 
 interface RealCloudShellProps {
@@ -22,30 +21,21 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [authStatus, setAuthStatus] = useState<'checking' | 'authenticating' | 'authenticated' | 'failed'>('checking');
-  const authInterceptorRef = useRef(new CloudShellAuthInterceptor());
 
   useEffect(() => {
+    let messageHandler: ((event: MessageEvent) => void) | null = null;
+    
     const initializeCloudShell = async () => {
       try {
         setAuthStatus('checking');
-        
-        // Start authentication interceptor BEFORE loading Cloud Shell
-        // This will intercept Google's sign-in flow and auto-authenticate
         setAuthStatus('authenticating');
-        await authInterceptorRef.current.startInterception();
-        console.log('Authentication interceptor started - will auto-authenticate Cloud Shell');
-
+        
+        // Load Cloud Shell in iframe - OAuth will work naturally
+        await loadCloudShellScripts((handler) => {
+          messageHandler = handler;
+        });
+        
         setAuthStatus('authenticated');
-        
-        // Load Cloud Shell scripts
-        // The interceptor will automatically handle authentication
-        await loadCloudShellScripts();
-        
-        // Apply Azalea branding after Cloud Shell loads
-        setTimeout(() => {
-          applyAzaleaBranding();
-        }, 2000);
-        
         setLoading(false);
       } catch (err) {
         console.error('Initialization error:', err);
@@ -56,14 +46,24 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
     };
 
     initializeCloudShell();
+    
+    // Cleanup message handler on unmount
+    return () => {
+      if (messageHandler) {
+        window.removeEventListener('message', messageHandler);
+      }
+    };
   }, []);
 
   /**
    * Sets up proxy for Cloud Shell API requests to bypass CORS
-   * Intercepts ALL requests to shell.cloud.google.com AND our domain's /cloudshell/* paths
-   * This matches the behavior expected by Cloud Shell scripts
+   * NOTE: This is no longer needed when using iframe approach, but kept for reference
    */
   const setupCloudShellProxy = (): void => {
+    // When using iframe, Cloud Shell runs directly in shell.cloud.google.com context
+    // So OAuth and cookies work naturally - no proxy needed
+    // This function is kept for potential future use but won't be called
+    return;
     // Track 401 errors to provide better feedback
     let authErrorCount = 0;
     const maxAuthErrors = 5;
@@ -291,92 +291,77 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
     });
   };
 
-  const loadCloudShellScripts = async (): Promise<void> => {
+  const loadCloudShellScripts = async (onMessageHandler?: (handler: (event: MessageEvent) => void) => void): Promise<void> => {
     return new Promise((resolve, reject) => {
       if (!containerRef.current) {
         reject(new Error('Container not available'));
         return;
       }
 
-      // Set up ppConfig (required by Cloud Shell)
-      (window as any).ppConfig = {
-        productName: 'a8a32321959c812aaca06d2067277be7',
-        deleteIsEnforced: false,
-        sealIsEnforced: false,
-        heartbeatRate: 0.5,
-        periodicReportingRateMillis: 60000.0,
-        disableAllReporting: false
-      };
-
-      // Create the Cloud Shell root element
-      const cloudShellRoot = document.createElement('cloud-shell-root');
-      cloudShellRoot.className = 'csh-app';
-      containerRef.current.appendChild(cloudShellRoot);
-
-      // Add body class for Cloud Shell styling
-      document.body.classList.add('csh-app-body', 'mat-app-background');
-
-      // Load Cloud Shell CSS
-      const cssLink = document.createElement('link');
-      cssLink.rel = 'stylesheet';
-      cssLink.href = 'https://www.gstatic.com/_/cloudshell-scs/_/ss/k=cloudshell-scs.csh.REhykk9w-JI.L.W.O/am=AAAD/d=0/rs=AKpenNb-zyE8LdUST7d_ssVbEfzNbhCdZQ/m=cloudshell';
-      document.head.appendChild(cssLink);
-
-      // Load Material Icons
-      const materialIconsLink = document.createElement('link');
-      materialIconsLink.rel = 'stylesheet';
-      materialIconsLink.href = 'https://fonts.googleapis.com/icon?family=Material+Icons';
-      document.head.appendChild(materialIconsLink);
-
-      // Load Google Material Icons
-      const googleMaterialIconsLink = document.createElement('link');
-      googleMaterialIconsLink.rel = 'stylesheet';
-      googleMaterialIconsLink.href = 'https://fonts.googleapis.com/css?family=Google+Material+Icons';
-      document.head.appendChild(googleMaterialIconsLink);
-
-      // Set CSH_SERVER_VARS (Cloud Shell server variables)
-      // Use the EXACT same encoded string from shell.html
-      // This is the actual server configuration that Cloud Shell expects
-      (window as any).CSH_SERVER_VARS = "\x5b\x5b\x22mynameisrohanandthisismyemail@gmail.com\x22,\x220\x22,\x22Rohan\x22,\x22Salem\x22\x5d,\x5b\x22https:\/\/shell.cloud.google.com\x22,\x22https:\/\/cloudshell.clients6.google.com\x22,\x22cloud-sshrelay-server_20251105.01_RC00\x22,null,\x22618104708054-9r9s1c4alg36erliucho9t52n32n6dgq.apps.googleusercontent.com\x22,\x22AIzaSyBj8JySZNOCTBCnK2w-CHlwJnpwcQkQ7Hk\x22,\x22https:\/\/cloudresourcemanager.clients6.google.com\x22,\x5bnull,null,null,\x22https:\/\/www.gstatic.com\/devops\/connect\/loader\/tool_library.js\x22\x5d,\x22https:\/\/www.googleapis.com\/auth\/userinfo.email https:\/\/www.googleapis.com\/auth\/userinfo.profile https:\/\/www.googleapis.com\/auth\/cloud-platform https:\/\/www.googleapis.com\/auth\/drive\x22,60,\x22https:\/\/workstations.googleapis.com\x22\x5d,\x5bnull,null,null,null,null,null,\x5b\x5bnull,102163142\x5d,\x5bnull,102162558\x5d,\x5bnull,115965161\x5d,\x5bnull,70980719\x5d,\x5bnull,71639050\x5d,\x5bnull,44537330\x5d,\x5bnull,44536920\x5d,\x5bnull,18800188\x5d,\x5bnull,103035570\x5d,\x5bnull,105075601\x5d,\x5bnull,44490095\x5d\x5d,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,1,null,null,1,null,null,null,null,1,null,null,null,null,1,null,1,null,null,1,null,null,1,1,1,null,1,1,1,null,null,1,null,null,null,null,1\x5d,null,\x5b\x5b\x22xtemp.xemail@gmail.com\x22,\x221\x22,\x22Temp\x22\x5d,\x5b\x22incogito.acc@gmail.com\x22,\x222\x22,\x22Incog\x22\x5d,\x5b\x22rndm.grpe@gmail.com\x22,\x223\x22,\x22Rohan\x22\x5d,\x5b\x22rohansalemisapro@gmail.com\x22,\x224\x22,\x22rohan\x22,\x22salem\x22\x5d,\x5b\x22rohansalem8@gmail.com\x22,\x225\x22,\x22Rohan\x22,\x22Salem\x22\x5d,\x5b\x22rndm.ptato@gmail.com\x22,\x226\x22,\x22Potato\x22\x5d\x5d,\x5b\x5b\x22gcr.io\/cloudshell-images\/cloudshell:latest\x22,\x22gcr.io\/cloudrun\/button:latest\x22,\x22gcr.io\/ds-artifacts-cloudshell\/deploystack_custom_image\x22\x5d,\x5b\x22github.com\/google\/\x22,\x22github.com\/googlestaging\/\x22,\x22github.com\/googleapis\/\x22,\x22github.com\/googlecloudplatform\/\x22,\x22github.com\/googlemaps\/\x22,\x22github.com\/googleworkspace\/\x22,\x22github.com\/terraform-google-modules\/\x22,\x22go.googlesource.com\/\x22\x5d,\x5b\x22github.com\/GoogleContainerTools\/skaffold\x22\x5d\x5d,\x5b\x5d,\x5b\x5b\x22github.com\/OnlineHacKing\/\x22,\x22github.com\/Bhaviktutorials\/\x22,\x22github.com\/sherlock-project\/\x22,\x22github.com\/htr-tech\/zphisher\/\x22,\x22github.com\/soxoj\/maigret\/\x22,\x22github.com\/fikrado\/\x22\x5d,\x5b\x22github.com\/JoelGMSec\/Cloudtopolis\x22\x5d\x5d\x5d";
-      (window as any).CSH_LOAD_T0 = Date.now();
-
-      // Define _DumpException function (required by Cloud Shell)
-      (window as any)._DumpException = function(e: any) {
-        console.error('Cloud Shell error:', e);
-      };
-
-      // Intercept fetch/XMLHttpRequest to proxy Cloud Shell API calls
-      // MUST be set up BEFORE Cloud Shell scripts load
-      setupCloudShellProxy();
-
-      // Set base href (required by Cloud Shell)
-      const baseElement = document.querySelector('base');
-      if (!baseElement) {
-        const base = document.createElement('base');
-        base.href = '/';
-        document.head.insertBefore(base, document.head.firstChild);
-      }
-
-      // Load the main Cloud Shell script from gstatic
-      // This is the exact same script URL from shell.html
-      const script = document.createElement('script');
-      script.src = 'https://www.gstatic.com/_/cloudshell-scs/_/js/k=cloudshell-scs.csh.en.AYpRfyRWRGQ.es5.O/am=AAAD/d=1/rs=AKpenNb23Sc0ShEzLJnDAJFR8jOOG-NU6A/m=cloudshell';
-      script.async = false; // Load synchronously to ensure proper initialization order
-      script.onload = () => {
-        (window as any).CSH_LOAD_T1 = Date.now();
-        console.log('Azalea Cloud Shell loaded (using real Google Cloud Shell scripts)');
-        console.log('API requests will be proxied through Azalea backend');
+      // Create an invisible iframe to get authentication cookies from shell.cloud.google.com
+      // This iframe will handle OAuth naturally and set cookies on Google's domain
+      const authIframe = document.createElement('iframe');
+      authIframe.style.position = 'absolute';
+      authIframe.style.width = '1px';
+      authIframe.style.height = '1px';
+      authIframe.style.opacity = '0';
+      authIframe.style.pointerEvents = 'none';
+      authIframe.style.border = 'none';
+      authIframe.src = 'https://shell.cloud.google.com/';
+      authIframe.title = 'Cloud Shell Auth';
+      
+      // Main Cloud Shell iframe - loads shell.cloud.google.com directly
+      // This allows OAuth to work naturally with cookies on Google's domain
+      const cloudShellIframe = document.createElement('iframe');
+      cloudShellIframe.src = 'https://shell.cloud.google.com/';
+      cloudShellIframe.style.width = '100%';
+      cloudShellIframe.style.height = '100%';
+      cloudShellIframe.style.border = 'none';
+      cloudShellIframe.style.backgroundColor = theme.surface;
+      cloudShellIframe.allow = 'clipboard-read; clipboard-write; fullscreen';
+      cloudShellIframe.title = 'Azalea Cloud Shell';
+      cloudShellIframe.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-top-navigation-by-user-activation';
+      
+      // Listen for messages from the iframe (for future enhancements)
+      const messageHandler = (event: MessageEvent) => {
+        // Only accept messages from shell.cloud.google.com
+        if (event.origin !== 'https://shell.cloud.google.com') {
+          return;
+        }
         
-        // Give Cloud Shell a moment to initialize
+        // Handle messages from Cloud Shell iframe
+        if (event.data && typeof event.data === 'object') {
+          console.log('[Cloud Shell] Message from iframe:', event.data);
+        }
+      };
+      
+      window.addEventListener('message', messageHandler);
+      
+      // Pass handler to parent for cleanup
+      if (onMessageHandler) {
+        onMessageHandler(messageHandler);
+      }
+      
+      cloudShellIframe.onload = () => {
+        console.log('Azalea Cloud Shell loaded in iframe');
+        console.log('OAuth will work naturally with Google\'s domain');
+        
+        // Apply branding after iframe loads
         setTimeout(() => {
+          applyAzaleaBranding();
           resolve();
-        }, 500);
+        }, 1000);
       };
-      script.onerror = (error) => {
-        console.error('Failed to load Cloud Shell scripts:', error);
-        reject(new Error('Failed to load Cloud Shell scripts'));
+      
+      cloudShellIframe.onerror = () => {
+        reject(new Error('Failed to load Cloud Shell iframe'));
       };
-      document.head.appendChild(script);
+      
+      // Add auth iframe first (invisible, for cookie acquisition)
+      document.body.appendChild(authIframe);
+      
+      // Add main Cloud Shell iframe
+      containerRef.current.appendChild(cloudShellIframe);
     });
   };
 
