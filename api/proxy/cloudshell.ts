@@ -60,24 +60,41 @@ export default async function handler(
       return;
     }
 
+    // Check if fetch is available
+    if (typeof fetch === 'undefined') {
+      return res.status(500).json({
+        error: 'fetch API not available',
+        message: 'Server runtime does not support fetch API',
+      });
+    }
+
     // Get access token for authentication
     let accessToken: string | null = null;
     
     try {
       // Try metadata server (if running in GCP)
-      // Use AbortController for timeout compatibility
-      const controller = new AbortController();
+      // Use AbortController for timeout compatibility if available
       let timeoutId: NodeJS.Timeout | null = null;
+      let signal: AbortSignal | undefined = undefined;
       
       try {
-        timeoutId = setTimeout(() => controller.abort(), 1000);
+        if (typeof AbortController !== 'undefined') {
+          const controller = new AbortController();
+          timeoutId = setTimeout(() => controller.abort(), 1000);
+          signal = controller.signal;
+        }
+        
+        const fetchOptions: RequestInit = {
+          headers: { 'Metadata-Flavor': 'Google' },
+        };
+        
+        if (signal) {
+          fetchOptions.signal = signal;
+        }
         
         const metadataResponse = await fetch(
           'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
-          {
-            headers: { 'Metadata-Flavor': 'Google' },
-            signal: controller.signal,
-          }
+          fetchOptions
         );
 
         if (timeoutId) clearTimeout(timeoutId);
@@ -185,7 +202,7 @@ export default async function handler(
     }
 
     if (!res.headersSent) {
-      return res.status(proxyResponse.status).send(isJson ? JSON.stringify(data) : data);
+    return res.status(proxyResponse.status).send(isJson ? JSON.stringify(data) : data);
     }
   } catch (error) {
     console.error('Proxy error:', error);

@@ -25,23 +25,41 @@ export default async function handler(
   }
 
   try {
+    // Check if fetch is available
+    if (typeof fetch === 'undefined') {
+      // fetch not available - return null token
+      return res.status(200).json({
+        token: null,
+        message: 'No token available - Cloud Shell will handle authentication',
+      });
+    }
+
     // Try to get token from metadata server (if running in GCP)
     let token: string | null = null;
 
     try {
-      // Use AbortController for timeout compatibility
-      const controller = new AbortController();
+      // Use AbortController for timeout compatibility if available
       let timeoutId: NodeJS.Timeout | null = null;
+      let signal: AbortSignal | undefined = undefined;
       
       try {
-        timeoutId = setTimeout(() => controller.abort(), 1000);
+        if (typeof AbortController !== 'undefined') {
+          const controller = new AbortController();
+          timeoutId = setTimeout(() => controller.abort(), 1000);
+          signal = controller.signal;
+        }
+        
+        const fetchOptions: RequestInit = {
+          headers: { 'Metadata-Flavor': 'Google' },
+        };
+        
+        if (signal) {
+          fetchOptions.signal = signal;
+        }
         
         const metadataResponse = await fetch(
           'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
-          {
-            headers: { 'Metadata-Flavor': 'Google' },
-            signal: controller.signal,
-          }
+          fetchOptions
         );
 
         if (timeoutId) clearTimeout(timeoutId);

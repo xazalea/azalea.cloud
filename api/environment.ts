@@ -25,20 +25,38 @@ export default async function handler(
   }
 
   try {
+    // Check if fetch is available
+    if (typeof fetch === 'undefined') {
+      // fetch not available - return false (not in cloud environment)
+      return res.status(200).json({
+        isCloudEnvironment: false,
+        message: 'fetch API not available',
+      });
+    }
+
     // Try to access metadata server (only works if running in GCP)
-    // Use AbortController for timeout compatibility
-    const controller = new AbortController();
+    // Use AbortController for timeout compatibility if available
     let timeoutId: NodeJS.Timeout | null = null;
+    let signal: AbortSignal | undefined = undefined;
     
     try {
-      timeoutId = setTimeout(() => controller.abort(), 1000);
+      if (typeof AbortController !== 'undefined') {
+        const controller = new AbortController();
+        timeoutId = setTimeout(() => controller.abort(), 1000);
+        signal = controller.signal;
+      }
+      
+      const fetchOptions: RequestInit = {
+        headers: { 'Metadata-Flavor': 'Google' },
+      };
+      
+      if (signal) {
+        fetchOptions.signal = signal;
+      }
       
       const response = await fetch(
         'http://metadata.google.internal/computeMetadata/v1/instance/',
-        {
-          headers: { 'Metadata-Flavor': 'Google' },
-          signal: controller.signal,
-        }
+        fetchOptions
       );
       
       if (timeoutId) clearTimeout(timeoutId);

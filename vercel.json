@@ -11,6 +11,10 @@
       "destination": "/api/cloudshell/:path*"
     },
     {
+      "source": "/clienterror/:path*",
+      "destination": "/api/clienterror/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
