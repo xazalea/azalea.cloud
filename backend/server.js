@@ -364,6 +364,138 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // API endpoints for Vercel fallback
+    if (path === '/api/environment' && req.method === 'GET') {
+      // Always return false - we're not in GCP
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        isCloudEnvironment: false,
+      }));
+      return;
+    }
+
+    if (path === '/api/auth/token' && req.method === 'GET') {
+      // Return null token - Cloud Shell will handle its own authentication
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        token: null,
+        message: 'No token available - Cloud Shell will handle authentication',
+      }));
+      return;
+    }
+
+    // Cloud Shell proxy endpoint
+    if (path.startsWith('/api/proxy/cloudshell') && (req.method === 'GET' || req.method === 'POST')) {
+      try {
+        // Extract the target path
+        const targetPath = path.replace('/api/proxy/cloudshell', '') || '/';
+        const queryString = url.search;
+        const fullPath = targetPath + queryString;
+        
+        // Build target URL
+        const baseUrl = 'https://shell.cloud.google.com';
+        const targetUrl = new URL(fullPath.startsWith('/') ? fullPath : `/${fullPath}`, baseUrl);
+        
+        // Get request body if POST
+        let requestBody = null;
+        if (req.method === 'POST') {
+          let body = '';
+          req.on('data', chunk => { body += chunk.toString(); });
+          await new Promise(resolve => req.on('end', resolve));
+          requestBody = body;
+        }
+        
+        // Forward the request to Cloud Shell
+        const proxyHeaders = {
+          'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0 (compatible; AzaleaCloud/1.0)',
+          'Accept': req.headers['accept'] || 'application/json, text/plain, */*',
+          'Accept-Language': req.headers['accept-language'] || 'en-US,en;q=0.9',
+        };
+        
+        if (req.headers['content-type']) {
+          proxyHeaders['Content-Type'] = req.headers['content-type'];
+        }
+        
+        if (req.headers['cookie']) {
+          proxyHeaders['Cookie'] = req.headers['cookie'];
+        }
+        
+        // Use node-fetch or native fetch if available
+        let fetch;
+        try {
+          fetch = require('node-fetch');
+        } catch {
+          // Use global fetch if available (Node 18+)
+          if (typeof globalThis.fetch === 'function') {
+            fetch = globalThis.fetch;
+          } else {
+            throw new Error('fetch not available');
+          }
+        }
+        
+        const proxyResponse = await fetch(targetUrl.toString(), {
+          method: req.method,
+          headers: proxyHeaders,
+          body: requestBody,
+        });
+        
+        const contentType = proxyResponse.headers.get('content-type') || '';
+        let data;
+        let isJson = false;
+        
+        if (contentType.includes('application/json')) {
+          data = await proxyResponse.json();
+          isJson = true;
+        } else {
+          data = await proxyResponse.text();
+        }
+        
+        // Forward response headers
+        proxyResponse.headers.forEach((value, key) => {
+          const lowerKey = key.toLowerCase();
+          if (!['access-control-allow-origin', 'x-frame-options', 'content-security-policy', 'content-encoding', 'transfer-encoding'].includes(lowerKey)) {
+            res.setHeader(key, value);
+          }
+        });
+        
+        if (isJson) {
+          res.setHeader('Content-Type', 'application/json');
+        }
+        
+        res.writeHead(proxyResponse.status);
+        res.end(isJson ? JSON.stringify(data) : data);
+        return;
+      } catch (error) {
+        console.error('Cloud Shell proxy error:', error);
+        res.writeHead(502);
+        res.end(JSON.stringify({
+          error: 'Failed to proxy request to Cloud Shell',
+          message: error.message,
+        }));
+        return;
+      }
+    }
+
+    // JavaScript error logger endpoint
+    if (path === '/clienterror/jserror' && (req.method === 'GET' || req.method === 'POST' || req.method === 'PUT')) {
+      // Log the error (in production, you'd want to send this to a logging service)
+      if (req.method === 'POST' || req.method === 'PUT') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        await new Promise(resolve => req.on('end', resolve));
+        
+        console.log('JavaScript error reported:', {
+          query: url.search,
+          body: body ? JSON.parse(body) : null,
+          method: req.method,
+        });
+      }
+      
+      res.writeHead(200);
+      res.end(JSON.stringify({ success: true }));
+      return;
+    }
+
     // 404
     res.writeHead(404);
     res.end(JSON.stringify({ error: 'Not found' }));

@@ -4,6 +4,8 @@
  * Similar to Google Cloud Shell's automatic authentication
  */
 
+import { apiFallback, APIFallbackError } from '../../src/services/apiFallbackService';
+
 export interface MetadataTokenResponse {
   access_token: string;
   expires_in: number;
@@ -43,8 +45,8 @@ export class CloudMetadataService {
   async isCloudEnvironment(): Promise<boolean> {
     try {
       if (this.isBrowser) {
-        // In browser, use API endpoint (server-side can access metadata)
-        const response = await fetch('/api/environment', {
+        // In browser, use API endpoint with WebVM fallback (server-side can access metadata)
+        const response = await apiFallback.get('/api/environment', {
           signal: AbortSignal.timeout(2000),
         });
         if (response.ok) {
@@ -74,8 +76,8 @@ export class CloudMetadataService {
    */
   async fetchMetadataToken(): Promise<MetadataTokenResponse> {
     if (this.isBrowser) {
-      // In browser, use API endpoint (server-side can access metadata)
-      const response = await fetch('/api/auth/token');
+      // In browser, use API endpoint with WebVM fallback (server-side can access metadata)
+      const response = await apiFallback.get('/api/auth/token');
       if (!response.ok) {
         throw new Error(`Token API responded with status: ${response.status}`);
       }

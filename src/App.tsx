@@ -20,6 +20,8 @@ import { AuthKeyService } from '../lib/auth/authKeyService';
 import { startWorker } from './services/workerService';
 import { useProvider } from './context/ProviderContext';
 import { useTheme } from './theme/theme';
+import { apiFallback, APIFallbackError } from './services/apiFallbackService';
+import { webvmManager } from './services/webvmManager';
 
 function AppContent() {
   const { currentProvider } = useProvider();
@@ -37,6 +39,17 @@ function AppContent() {
   const [desktopUrl, setDesktopUrl] = useState<string | null>(null);
 
   useEffect(() => {
+    // Initialize WebVM manager to ensure backend is always available
+    webvmManager.ensureAvailable(3).then(available => {
+      if (available) {
+        console.log('[App] ✅ WebVM backend is available');
+      } else {
+        const errorMsg = webvmManager.getErrorMessage();
+        console.warn('[App] ⚠️ WebVM backend not available:', errorMsg);
+        showError('WebVM Backend Not Available', errorMsg);
+      }
+    });
+
     // Initialize token refresh manager (non-blocking)
     const manager = new TokenRefreshManager(async (token) => {
       // Save token to database when updated
@@ -55,16 +68,23 @@ function AppContent() {
       setTimeout(() => {
         const checkMetadataServer = async () => {
           try {
-            // Use API endpoint to avoid mixed content errors
+            // Use API endpoint with WebVM fallback to avoid mixed content errors
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 200); // 200ms timeout
             
-            const response = await fetch(
+            const response = await apiFallback.get(
               '/api/auth/token',
               {
                 signal: controller.signal,
               }
-            ).catch(() => null); // Catch all errors immediately
+            ).catch((error) => {
+              // Handle API fallback errors with clear messages
+              if (error instanceof APIFallbackError) {
+                console.error('[App] Token API error:', error.getUserMessage());
+                // Don't show notification for token errors - they're expected when not in GCP
+              }
+              return null;
+            }); // Catch all errors immediately
             
             clearTimeout(timeoutId);
             
@@ -77,6 +97,9 @@ function AppContent() {
             }
           } catch (error) {
             // Silently fail - don't block UI
+            if (error instanceof APIFallbackError) {
+              console.error('[App] Token check error:', error.getUserMessage());
+            }
           }
         };
 

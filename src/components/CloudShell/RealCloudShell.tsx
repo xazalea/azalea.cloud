@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTheme } from '../../theme/theme';
 import { CloudShellAuthInterceptor } from '../../services/cloudShellAuthInterceptor';
+import { apiFallback, fetchWithFallback, APIFallbackError } from '../../services/apiFallbackService';
 
 interface RealCloudShellProps {
   onDesktopClick?: () => void;
@@ -69,6 +70,35 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       const urlStr = url.toString();
       
+      // First, check if this is a call to one of our API endpoints that should use fallback
+      // This catches jserror and other API calls from Cloud Shell scripts
+      if (urlStr.includes('/api/environment') || 
+          urlStr.includes('/api/auth/token') || 
+          urlStr.includes('/api/proxy/cloudshell') ||
+          urlStr.includes('/clienterror/jserror')) {
+        // Use fetchWithFallback for these endpoints
+        try {
+          const method = init?.method || (typeof input === 'object' && 'method' in input ? (input as Request).method : 'GET');
+          if (method === 'GET') {
+            return await apiFallback.get(urlStr, init);
+          } else if (method === 'POST' || method === 'PUT') {
+            const body = init?.body || (typeof input === 'object' && 'body' in input ? (input as Request).body : undefined);
+            return method === 'POST' 
+              ? await apiFallback.post(urlStr, body, init)
+              : await apiFallback.put(urlStr, body, init);
+          } else {
+            return await fetchWithFallback(urlStr, { ...init, method });
+          }
+        } catch (error) {
+          // Handle API fallback errors
+          if (error instanceof APIFallbackError) {
+            console.error('[Cloud Shell Proxy]', error.getUserMessage());
+          }
+          // If fallback fails, try original fetch
+          return originalFetch(input, init);
+        }
+      }
+      
       // Proxy ALL requests to shell.cloud.google.com through our backend
       // Also proxy requests to our own domain's /cloudshell/* paths
       if (urlStr.includes('shell.cloud.google.com') || urlStr.includes('/cloudshell/')) {
@@ -83,10 +113,10 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
           proxyPath = urlObj.pathname.replace(/^\/cloudshell/, '') + urlObj.search;
         }
         
-        // Route through our proxy API
+        // Route through our proxy API with WebVM fallback
         const proxyUrl = `/api/proxy/cloudshell?path=${encodeURIComponent(proxyPath.replace(/^\//, ''))}`;
         
-        return originalFetch(proxyUrl, {
+        return apiFallback.get(proxyUrl, {
           ...init,
           headers: {
             ...init?.headers,
@@ -123,6 +153,8 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         const proxyUrl = `/api/proxy/cloudshell?path=${encodeURIComponent(proxyPath.replace(/^\//, ''))}`;
         (this as any)._proxied = true;
         (this as any)._originalUrl = originalUrl;
+        (this as any)._proxyUrl = proxyUrl;
+        (this as any)._method = method;
         return originalXHROpen.call(this, method, proxyUrl, async ?? true, username ?? null, password ?? null);
       }
       
@@ -131,6 +163,10 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
     
     XMLHttpRequest.prototype.send = function(body?: Document | XMLHttpRequestBodyInit | null) {
       if ((this as any)._proxied) {
+        // Add X-Original-URL header for proxy requests
+        // Note: XHR will go through the proxy URL, and if Vercel returns 500,
+        // the fallback service will handle it at the fetch level for fetch requests.
+        // For XHR, we rely on the proxy URL working, but most Cloud Shell requests use fetch.
         this.setRequestHeader('X-Original-URL', (this as any)._originalUrl);
       }
       return originalXHRSend.call(this, body);

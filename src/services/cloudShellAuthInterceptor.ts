@@ -5,6 +5,7 @@
 
 import { CloudMetadataService } from '../../lib/services/cloudMetadataService';
 import { loadGapi, initGapiClient } from '../../lib/api/gapiLoader';
+import { apiFallback, APIFallbackError } from './apiFallbackService';
 
 export class CloudShellAuthInterceptor {
   private metadataService: CloudMetadataService;
@@ -63,10 +64,9 @@ export class CloudShellAuthInterceptor {
    */
   private async getTokenFromBackend(): Promise<void> {
     try {
-      // Try to get token from our auth system
+      // Try to get token from our auth system with WebVM fallback
       // This could be from Firebase, our backend, or stored credentials
-      const response = await fetch('/api/auth/token', {
-        method: 'GET',
+      const response = await apiFallback.get('/api/auth/token', {
         credentials: 'include',
       }).catch(() => null);
 
@@ -79,6 +79,10 @@ export class CloudShellAuthInterceptor {
         }
       }
     } catch (err) {
+      // Handle API fallback errors
+      if (err instanceof APIFallbackError) {
+        console.warn('[Cloud Shell Auth] Token fetch failed:', err.getUserMessage());
+      }
       // Continue - will try other methods
     }
 

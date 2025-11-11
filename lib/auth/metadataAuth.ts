@@ -5,6 +5,8 @@
  * for obtaining and managing Google Cloud access tokens.
  */
 
+import { apiFallback, APIFallbackError } from '../../src/services/apiFallbackService';
+
 export interface AccessToken {
   token: string;
   expiresAt: number;
@@ -29,8 +31,8 @@ export async function fetchMetadataToken(): Promise<AccessToken> {
   
   try {
     if (isBrowser) {
-      // In browser, use API endpoint (server-side can access metadata)
-      const response = await fetch('/api/auth/token');
+      // In browser, use API endpoint with WebVM fallback (server-side can access metadata)
+      const response = await apiFallback.get('/api/auth/token');
       
       if (!response.ok) {
         throw new Error(`Token API responded with status: ${response.status}`);
@@ -73,6 +75,11 @@ export async function fetchMetadataToken(): Promise<AccessToken> {
       };
     }
   } catch (error) {
+    if (error instanceof APIFallbackError) {
+      console.error('[Metadata Auth] ❌', error.getUserMessage());
+      // Re-throw with more context
+      throw new Error(`Failed to fetch metadata token: ${error.message}`);
+    }
     console.error('Failed to fetch metadata token:', error);
     throw error;
   }
