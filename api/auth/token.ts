@@ -63,24 +63,31 @@ export default async function handler(
     // If no token from metadata server, return null
     // Cloud Shell will handle its own authentication
     if (!token) {
+      if (!res.headersSent) {
+        return res.status(200).json({
+          token: null,
+          message: 'No token available - Cloud Shell will handle authentication',
+        });
+      }
+      return;
+    }
+
+    if (!res.headersSent) {
+      return res.status(200).json({
+        token,
+        expires_in: 3600,
+        token_type: 'Bearer',
+      });
+    }
+  } catch (error) {
+    console.error('Error getting token:', error);
+    if (!res.headersSent) {
       return res.status(200).json({
         token: null,
         message: 'No token available - Cloud Shell will handle authentication',
+        error: error instanceof Error ? error.message : 'Failed to get token',
       });
     }
-
-    return res.status(200).json({
-      token,
-      expires_in: 3600,
-      token_type: 'Bearer',
-    });
-  } catch (error) {
-    console.error('Error getting token:', error);
-    return res.status(200).json({
-      token: null,
-      message: 'No token available - Cloud Shell will handle authentication',
-      error: error instanceof Error ? error.message : 'Failed to get token',
-    });
   }
 }
 

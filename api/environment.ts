@@ -49,6 +49,7 @@ export default async function handler(
     } catch (fetchError) {
       if (timeoutId) clearTimeout(timeoutId);
       // Not in GCP environment - that's okay
+      // This is expected when not running in GCP
       return res.status(200).json({
         isCloudEnvironment: false,
       });
@@ -56,9 +57,13 @@ export default async function handler(
   } catch (error) {
     // Catch any other errors
     console.error('Environment check error:', error);
-    return res.status(200).json({
-      isCloudEnvironment: false,
-    });
+    // Always return 200 with false - don't fail the request
+    if (!res.headersSent) {
+      return res.status(200).json({
+        isCloudEnvironment: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
   }
 }
 

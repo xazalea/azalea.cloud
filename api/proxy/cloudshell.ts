@@ -96,7 +96,16 @@ export default async function handler(
 
     // Build target URL
     const baseUrl = 'https://shell.cloud.google.com';
-    const url = new URL(targetPath.startsWith('/') ? targetPath : `/${targetPath}`, baseUrl);
+    let url: URL;
+    try {
+      url = new URL(targetPath.startsWith('/') ? targetPath : `/${targetPath}`, baseUrl);
+    } catch (urlError) {
+      console.error('Invalid URL construction:', urlError);
+      return res.status(400).json({
+        error: 'Invalid URL path',
+        message: urlError instanceof Error ? urlError.message : 'Failed to construct URL',
+      });
+    }
 
     // Forward the request to Cloud Shell with proper headers
     const proxyHeaders: Record<string, string> = {
@@ -175,7 +184,9 @@ export default async function handler(
       res.setHeader('Content-Type', 'application/json');
     }
 
-    return res.status(proxyResponse.status).send(isJson ? JSON.stringify(data) : data);
+    if (!res.headersSent) {
+      return res.status(proxyResponse.status).send(isJson ? JSON.stringify(data) : data);
+    }
   } catch (error) {
     console.error('Proxy error:', error);
     // Make sure we haven't already sent a response
