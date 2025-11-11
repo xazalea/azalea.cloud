@@ -3,59 +3,22 @@ import { useTheme } from '../../theme/theme';
 
 /**
  * AzaleaSSHX - WebVM with sshx.io integration
- * Runs sshx start script on backend, gets final URL, serves as iframe
+ * Uses a direct sshx.io session URL
  */
 export const WebVMSSHX: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
-  const [sshxUrl, setSshxUrl] = useState<string | null>(null);
+  // Direct sshx.io session URL
+  const sshxUrl = 'https://sshx.io/s/a8I0fyXd8m#zbC5SqX5ev84qk';
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const startSSHX = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        // Call backend to start sshx
-        const response = await fetch('http://localhost:3001/api/sshx/start', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-
-        const data = await response.json();
-
-        if (data.success && data.url) {
-          setSshxUrl(data.url);
-        } else if (data.fallback) {
-          // Use fallback URL
-          setSshxUrl(data.fallback);
-        } else {
-          throw new Error(data.error || 'Failed to start sshx');
-        }
-      } catch (err) {
-        console.error('Failed to start sshx:', err);
-        setError(err instanceof Error ? err.message : 'Unknown error');
-        // Fallback to sshx.io homepage
-        setSshxUrl('https://sshx.io/');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    startSSHX();
-  }, []);
-
-  useEffect(() => {
-    if (!containerRef.current || !sshxUrl) return;
+    if (!containerRef.current) return;
 
     // Clear any existing iframe
     containerRef.current.innerHTML = '';
 
-    // Create iframe with final SSHX URL
+    // Create iframe with SSHX URL
     const iframe = document.createElement('iframe');
     iframe.src = sshxUrl;
     iframe.style.width = '100%';
@@ -64,6 +27,9 @@ export const WebVMSSHX: React.FC = () => {
     iframe.style.backgroundColor = theme.surface;
     iframe.allow = 'clipboard-read; clipboard-write; fullscreen';
     iframe.title = 'AzaleaSSHX - sshx.io Collaborative Terminal';
+    iframe.onload = () => {
+      setLoading(false);
+    };
 
     containerRef.current.appendChild(iframe);
 
@@ -72,7 +38,7 @@ export const WebVMSSHX: React.FC = () => {
         containerRef.current.removeChild(iframe);
       }
     };
-  }, [sshxUrl, theme]);
+  }, [theme]);
 
   return (
     <div
@@ -163,7 +129,7 @@ export const WebVMSSHX: React.FC = () => {
                 backgroundColor: sshxUrl && !loading ? theme.success : theme.textSecondary,
               }}
             />
-            {loading ? 'Starting sshx...' : sshxUrl ? 'Connected' : 'Error'}
+            {loading ? 'Loading sshx...' : 'Connected'}
           </div>
         </div>
         {sshxUrl && (
@@ -223,34 +189,8 @@ export const WebVMSSHX: React.FC = () => {
               download
             </span>
             <div style={{ textAlign: 'center', color: theme.textSecondary }}>
-              <div style={{ fontSize: '16px', marginBottom: '8px' }}>Starting sshx...</div>
-              <div style={{ fontSize: '12px' }}>This may take a moment</div>
-            </div>
-          </div>
-        )}
-        {error && !loading && (
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: theme.surface,
-              zIndex: 10,
-              flexDirection: 'column',
-              gap: '16px',
-            }}
-          >
-            <span className="material-icons" style={{ fontSize: '48px', color: theme.error }}>
-              error_outline
-            </span>
-            <div style={{ textAlign: 'center', color: theme.textSecondary }}>
-              <div style={{ fontSize: '16px', marginBottom: '8px', color: theme.error }}>Error</div>
-              <div style={{ fontSize: '12px' }}>{error}</div>
+              <div style={{ fontSize: '16px', marginBottom: '8px' }}>Loading sshx session...</div>
+              <div style={{ fontSize: '12px' }}>Connecting to collaborative terminal</div>
             </div>
           </div>
         )}
