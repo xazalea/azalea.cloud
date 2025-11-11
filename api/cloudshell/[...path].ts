@@ -39,6 +39,7 @@ export default async function handler(
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
 
     if (req.method === 'OPTIONS') {
+      responseSent = true;
       res.status(200).end();
       return;
     }
@@ -124,9 +125,25 @@ export default async function handler(
           ...(req.headers['cookie'] && { 'Cookie': req.headers['cookie'] }),
           ...(req.headers['referer'] && { 'Referer': req.headers['referer'] }),
         },
-        body: req.method !== 'GET' && req.method !== 'HEAD' 
-          ? (typeof req.body === 'string' ? req.body : JSON.stringify(req.body))
-          : undefined,
+        body: (() => {
+          if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+            return undefined;
+          }
+          if (req.body === undefined || req.body === null) {
+            return undefined;
+          }
+          if (typeof req.body === 'string') {
+            return req.body;
+          }
+          if (typeof req.body === 'object') {
+            try {
+              return JSON.stringify(req.body);
+            } catch {
+              return String(req.body);
+            }
+          }
+          return String(req.body);
+        })(),
       });
     } catch (fetchError) {
       console.error('Failed to fetch from Cloud Shell:', fetchError);
@@ -183,12 +200,24 @@ export default async function handler(
     console.error('Cloud Shell proxy error:', error);
     // Always return a response, even on error
     if (!responseSent && !res.headersSent) {
-      sendResponse(500, {
-        error: {
-          code: '500',
-          message: error instanceof Error ? error.message : 'A server error has occurred',
-        },
-      });
+      try {
+        responseSent = true;
+        res.status(500).json({
+          error: {
+            code: '500',
+            message: error instanceof Error ? error.message : 'A server error has occurred',
+          },
+        });
+      } catch (sendError) {
+        console.error('Failed to send error response:', sendError);
+        try {
+          if (!res.headersSent) {
+            res.status(500).end();
+          }
+        } catch (finalError) {
+          console.error('Failed to end response:', finalError);
+        }
+      }
     }
     return;
   }

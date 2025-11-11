@@ -29,6 +29,7 @@ export default async function handler(
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     if (req.method === 'OPTIONS') {
+      responseSent = true;
       res.status(200).end();
       return;
     }

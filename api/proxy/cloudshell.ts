@@ -13,23 +13,36 @@ export default async function handler(
   let responseSent = false;
   
   const sendResponse = (status: number, data: any) => {
-    if (responseSent) {
-      console.warn('Attempted to send response twice, ignoring');
+    if (responseSent) return;
+    if (res.headersSent) {
+      console.warn('Response already sent, ignoring duplicate send');
       return;
     }
-    responseSent = true;
-    res.status(status).json(data);
+    try {
+      responseSent = true;
+      res.status(status).json(data);
+    } catch (err) {
+      console.error('Error sending response:', err);
+      responseSent = false; // Reset on error so we can try again
+    }
   };
 
   const sendTextResponse = (status: number, data: string) => {
-    if (responseSent) {
-      console.warn('Attempted to send response twice, ignoring');
+    if (responseSent) return;
+    if (res.headersSent) {
+      console.warn('Response already sent, ignoring duplicate send');
       return;
     }
-    responseSent = true;
-    res.status(status).send(data);
+    try {
+      responseSent = true;
+      res.status(status).send(data);
+    } catch (err) {
+      console.error('Error sending text response:', err);
+      responseSent = false; // Reset on error so we can try again
+    }
   };
 
+  // Top-level error handler - catch everything
   try {
     // CORS headers - set first
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -37,43 +50,59 @@ export default async function handler(
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
 
     if (req.method === 'OPTIONS') {
+      responseSent = true;
       res.status(200).end();
       return;
     }
 
     // Get the path from query or from X-Original-URL header
     let targetPath = '';
-    let originalUrl = req.headers['x-original-url'] as string;
-    
-    if (originalUrl) {
-      // Extract path and query from original URL
-      try {
-        const url = new URL(originalUrl);
-        targetPath = url.pathname + url.search;
-      } catch {
-        // If URL parsing fails, use as-is
-        targetPath = originalUrl.replace('https://shell.cloud.google.com', '');
-      }
-    } else {
-      // Fallback to query parameter
-      const { path, ...queryParams } = req.query;
-      targetPath = Array.isArray(path) ? path.join('/') : (path || '');
+    try {
+      const originalUrl = req.headers?.['x-original-url'] as string | undefined;
       
-      // Add query parameters to path
-      const queryString = new URLSearchParams();
-      Object.entries(queryParams).forEach(([key, value]) => {
-        if (key !== 'path' && value) {
-          if (Array.isArray(value)) {
-            value.forEach(v => queryString.append(key, String(v)));
-          } else {
-            queryString.append(key, String(value));
+      if (originalUrl && typeof originalUrl === 'string') {
+        // Extract path and query from original URL
+        try {
+          const url = new URL(originalUrl);
+          targetPath = url.pathname + url.search;
+        } catch {
+          // If URL parsing fails, use as-is
+          targetPath = originalUrl.replace('https://shell.cloud.google.com', '').replace('http://shell.cloud.google.com', '');
+        }
+      } else {
+        // Fallback to query parameter
+        const query = req.query || {};
+        const path = query.path;
+        const { path: _, ...queryParams } = query;
+        
+        targetPath = Array.isArray(path) ? path.join('/') : (path ? String(path) : '');
+        
+        // Add query parameters to path
+        if (Object.keys(queryParams).length > 0) {
+          const queryString = new URLSearchParams();
+          Object.entries(queryParams).forEach(([key, value]) => {
+            if (key !== 'path' && value !== undefined && value !== null) {
+              try {
+                if (Array.isArray(value)) {
+                  value.forEach(v => queryString.append(key, String(v)));
+                } else {
+                  queryString.append(key, String(value));
+                }
+              } catch (paramError) {
+                console.warn(`Failed to add query param ${key}:`, paramError);
+              }
+            }
+          });
+          
+          if (queryString.toString()) {
+            targetPath += (targetPath.includes('?') ? '&' : '?') + queryString.toString();
           }
         }
-      });
-      
-      if (queryString.toString()) {
-        targetPath += (targetPath.includes('?') ? '&' : '?') + queryString.toString();
       }
+    } catch (pathError) {
+      console.error('Error extracting target path:', pathError);
+      sendResponse(400, { error: 'Failed to extract path from request' });
+      return;
     }
 
     if (!targetPath) {
@@ -162,35 +191,54 @@ export default async function handler(
 
     // Forward the request to Cloud Shell with proper headers
     const proxyHeaders: Record<string, string> = {
-      'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0 (compatible; AzaleaCloud/1.0)',
-      'Accept': req.headers['accept'] || 'application/json, text/plain, */*',
-      'Accept-Language': req.headers['accept-language'] || 'en-US,en;q=0.9',
+      'User-Agent': (req.headers?.['user-agent'] as string) || 'Mozilla/5.0 (compatible; AzaleaCloud/1.0)',
+      'Accept': (req.headers?.['accept'] as string) || 'application/json, text/plain, */*',
+      'Accept-Language': (req.headers?.['accept-language'] as string) || 'en-US,en;q=0.9',
     };
 
     // Add content type if present
-    if (req.headers['content-type']) {
-      proxyHeaders['Content-Type'] = req.headers['content-type'];
+    const contentType = req.headers?.['content-type'];
+    if (contentType && typeof contentType === 'string') {
+      proxyHeaders['Content-Type'] = contentType;
     }
 
     // Add authorization if we have a token
-    if (accessToken) {
+    if (accessToken && typeof accessToken === 'string') {
       proxyHeaders['Authorization'] = `Bearer ${accessToken}`;
     }
 
     // Add cookies if present (for session)
-    if (req.headers['cookie']) {
-      proxyHeaders['Cookie'] = req.headers['cookie'];
+    const cookie = req.headers?.['cookie'];
+    if (cookie && typeof cookie === 'string') {
+      proxyHeaders['Cookie'] = cookie;
     }
 
     // Forward the request
     let proxyResponse: Response;
     try {
+      // Prepare request body safely
+      let requestBody: string | undefined = undefined;
+      if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS') {
+        if (req.body !== undefined && req.body !== null) {
+          if (typeof req.body === 'string') {
+            requestBody = req.body;
+          } else if (typeof req.body === 'object') {
+            try {
+              requestBody = JSON.stringify(req.body);
+            } catch (stringifyError) {
+              console.warn('Failed to stringify request body:', stringifyError);
+              requestBody = String(req.body);
+            }
+          } else {
+            requestBody = String(req.body);
+          }
+        }
+      }
+
       proxyResponse = await fetch(url.toString(), {
         method: req.method,
         headers: proxyHeaders,
-        body: req.method !== 'GET' && req.method !== 'HEAD' 
-          ? (typeof req.body === 'string' ? req.body : JSON.stringify(req.body))
-          : undefined,
+        body: requestBody,
       });
     } catch (fetchError) {
       console.error('Failed to fetch from Cloud Shell:', fetchError);
@@ -251,15 +299,39 @@ export default async function handler(
   } catch (error) {
     console.error('Proxy error:', error);
     // Always return a response, even on error
-    if (!responseSent && !res.headersSent) {
-      sendResponse(500, {
-        error: {
-          code: '500',
-          message: error instanceof Error ? error.message : 'A server error has occurred',
-        },
-      });
+    if (!responseSent) {
+      try {
+        if (!res.headersSent) {
+          responseSent = true;
+          res.status(500).json({
+            error: {
+              code: '500',
+              message: error instanceof Error ? error.message : 'A server error has occurred',
+            },
+          });
+        } else {
+          // Headers already sent, can't send JSON, just log
+          console.error('Cannot send error response - headers already sent');
+        }
+      } catch (sendError) {
+        console.error('Failed to send error response:', sendError);
+        // Last resort - try to end the response
+        try {
+          if (!res.headersSent && !responseSent) {
+            responseSent = true;
+            res.status(500).end();
+          }
+        } catch (finalError) {
+          console.error('Failed to end response:', finalError);
+        }
+      }
     }
     return;
   }
 }
+
+// Export with error boundary
+export const config = {
+  runtime: 'nodejs',
+};
 
