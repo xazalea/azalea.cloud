@@ -9,17 +9,17 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-
   try {
+    // CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+
+    if (req.method === 'OPTIONS') {
+      res.status(200).end();
+      return;
+    }
+
     // Get the path from query or from X-Original-URL header
     let targetPath = '';
     let originalUrl = req.headers['x-original-url'] as string;
@@ -202,7 +202,7 @@ export default async function handler(
     }
 
     if (!res.headersSent) {
-    return res.status(proxyResponse.status).send(isJson ? JSON.stringify(data) : data);
+      return res.status(proxyResponse.status).send(isJson ? JSON.stringify(data) : data);
     }
   } catch (error) {
     console.error('Proxy error:', error);
