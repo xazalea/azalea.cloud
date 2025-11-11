@@ -57,16 +57,52 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
 
   /**
    * Sets up proxy for Cloud Shell API requests to bypass CORS
-   * NOTE: This is no longer needed when using iframe approach, but kept for reference
+   * Intercepts ALL requests to shell.cloud.google.com AND our domain's /cloudshell/* paths
+   * Also handles OAuth redirects by opening popup windows
    */
   const setupCloudShellProxy = (): void => {
-    // When using iframe, Cloud Shell runs directly in shell.cloud.google.com context
-    // So OAuth and cookies work naturally - no proxy needed
-    // This function is kept for potential future use but won't be called
-    return;
-    // Track 401 errors to provide better feedback
+    // Track 401 errors to provide better feedback and trigger OAuth if needed
     let authErrorCount = 0;
     const maxAuthErrors = 5;
+    let oauthPopup: Window | null = null;
+    
+    // Intercept window.open to handle OAuth popups
+    const originalOpen = window.open;
+    window.open = function(url?: string | URL, target?: string, features?: string): Window | null {
+      const urlStr = url?.toString() || '';
+      
+      // If this is an OAuth popup, open it and monitor for completion
+      if (urlStr.includes('accounts.google.com/o/oauth2') || 
+          urlStr.includes('accounts.google.com/ServiceLogin') ||
+          urlStr.includes('oauth2')) {
+        console.log('[Cloud Shell] Opening OAuth popup:', urlStr);
+        oauthPopup = originalOpen.call(window, url, target, features);
+        
+        // Monitor the popup for OAuth completion
+        if (oauthPopup) {
+          const checkPopup = setInterval(() => {
+            try {
+              if (oauthPopup?.closed) {
+                clearInterval(checkPopup);
+                console.log('[Cloud Shell] OAuth popup closed - authentication may have completed');
+                // Reset auth error count after OAuth attempt
+                authErrorCount = 0;
+                // Reload Cloud Shell to retry with new auth
+                setTimeout(() => {
+                  window.location.reload();
+                }, 1000);
+              }
+            } catch (e) {
+              // Cross-origin error - popup still open
+            }
+          }, 500);
+        }
+        
+        return oauthPopup;
+      }
+      
+      return originalOpen.call(window, url, target, features);
+    };
     
     // Intercept fetch requests to Cloud Shell
     const originalFetch = window.fetch;
@@ -147,6 +183,14 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
             // Don't log 401s as errors - they're expected during authentication
             if (authErrorCount <= maxAuthErrors) {
               console.log(`[Cloud Shell] Authentication required (${authErrorCount}/${maxAuthErrors}) - OAuth flow will be triggered automatically`);
+            }
+            
+            // If we get too many 401s and no OAuth popup is open, try to trigger OAuth manually
+            if (authErrorCount >= 3 && !oauthPopup) {
+              console.log('[Cloud Shell] Multiple 401 errors detected - attempting to trigger OAuth');
+              // Try to open OAuth directly
+              const oauthUrl = `https://accounts.google.com/o/oauth2/auth?client_id=618104708054-9r9s1c4alg36erliucho9t52n32n6dgq.apps.googleusercontent.com&redirect_uri=https://shell.cloud.google.com/oauth2callback&response_type=code&scope=https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/drive`;
+              oauthPopup = window.open(oauthUrl, 'oauth', 'width=500,height=600');
             }
           } else if (response.status < 400) {
             // Reset counter on successful requests
@@ -298,70 +342,86 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         return;
       }
 
-      // Create an invisible iframe to get authentication cookies from shell.cloud.google.com
-      // This iframe will handle OAuth naturally and set cookies on Google's domain
-      const authIframe = document.createElement('iframe');
-      authIframe.style.position = 'absolute';
-      authIframe.style.width = '1px';
-      authIframe.style.height = '1px';
-      authIframe.style.opacity = '0';
-      authIframe.style.pointerEvents = 'none';
-      authIframe.style.border = 'none';
-      authIframe.src = 'https://shell.cloud.google.com/';
-      authIframe.title = 'Cloud Shell Auth';
-      
-      // Main Cloud Shell iframe - loads shell.cloud.google.com directly
-      // This allows OAuth to work naturally with cookies on Google's domain
-      const cloudShellIframe = document.createElement('iframe');
-      cloudShellIframe.src = 'https://shell.cloud.google.com/';
-      cloudShellIframe.style.width = '100%';
-      cloudShellIframe.style.height = '100%';
-      cloudShellIframe.style.border = 'none';
-      cloudShellIframe.style.backgroundColor = theme.surface;
-      cloudShellIframe.allow = 'clipboard-read; clipboard-write; fullscreen';
-      cloudShellIframe.title = 'Azalea Cloud Shell';
-      cloudShellIframe.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-top-navigation-by-user-activation';
-      
-      // Listen for messages from the iframe (for future enhancements)
-      const messageHandler = (event: MessageEvent) => {
-        // Only accept messages from shell.cloud.google.com
-        if (event.origin !== 'https://shell.cloud.google.com') {
-          return;
-        }
-        
-        // Handle messages from Cloud Shell iframe
-        if (event.data && typeof event.data === 'object') {
-          console.log('[Cloud Shell] Message from iframe:', event.data);
-        }
+      // Note: shell.cloud.google.com sets X-Frame-Options: deny, so we can't use iframe
+      // Instead, we load Cloud Shell scripts directly and handle OAuth via popup/redirect
+
+      // Set up ppConfig (required by Cloud Shell)
+      (window as any).ppConfig = {
+        productName: 'a8a32321959c812aaca06d2067277be7',
+        deleteIsEnforced: false,
+        sealIsEnforced: false,
+        heartbeatRate: 0.5,
+        periodicReportingRateMillis: 60000.0,
+        disableAllReporting: false
       };
-      
-      window.addEventListener('message', messageHandler);
-      
-      // Pass handler to parent for cleanup
-      if (onMessageHandler) {
-        onMessageHandler(messageHandler);
+
+      // Create the Cloud Shell root element
+      const cloudShellRoot = document.createElement('cloud-shell-root');
+      cloudShellRoot.className = 'csh-app';
+      containerRef.current.appendChild(cloudShellRoot);
+
+      // Add body class for Cloud Shell styling
+      document.body.classList.add('csh-app-body', 'mat-app-background');
+
+      // Load Cloud Shell CSS
+      const cssLink = document.createElement('link');
+      cssLink.rel = 'stylesheet';
+      cssLink.href = 'https://www.gstatic.com/_/cloudshell-scs/_/ss/k=cloudshell-scs.csh.REhykk9w-JI.L.W.O/am=AAAD/d=0/rs=AKpenNb-zyE8LdUST7d_ssVbEfzNbhCdZQ/m=cloudshell';
+      document.head.appendChild(cssLink);
+
+      // Load Material Icons
+      const materialIconsLink = document.createElement('link');
+      materialIconsLink.rel = 'stylesheet';
+      materialIconsLink.href = 'https://fonts.googleapis.com/icon?family=Material+Icons';
+      document.head.appendChild(materialIconsLink);
+
+      // Load Google Material Icons
+      const googleMaterialIconsLink = document.createElement('link');
+      googleMaterialIconsLink.rel = 'stylesheet';
+      googleMaterialIconsLink.href = 'https://fonts.googleapis.com/css?family=Google+Material+Icons';
+      document.head.appendChild(googleMaterialIconsLink);
+
+      // Set CSH_SERVER_VARS (Cloud Shell server variables)
+      // Use the EXACT same encoded string from shell.html
+      (window as any).CSH_SERVER_VARS = "\x5b\x5b\x22mynameisrohanandthisismyemail@gmail.com\x22,\x220\x22,\x22Rohan\x22,\x22Salem\x22\x5d,\x5b\x22https:\/\/shell.cloud.google.com\x22,\x22https:\/\/cloudshell.clients6.google.com\x22,\x22cloud-sshrelay-server_20251105.01_RC00\x22,null,\x22618104708054-9r9s1c4alg36erliucho9t52n32n6dgq.apps.googleusercontent.com\x22,\x22AIzaSyBj8JySZNOCTBCnK2w-CHlwJnpwcQkQ7Hk\x22,\x22https:\/\/cloudresourcemanager.clients6.google.com\x22,\x5bnull,null,null,\x22https:\/\/www.gstatic.com\/devops\/connect\/loader\/tool_library.js\x22\x5d,\x22https:\/\/www.googleapis.com\/auth\/userinfo.email https:\/\/www.googleapis.com\/auth\/userinfo.profile https:\/\/www.googleapis.com\/auth\/cloud-platform https:\/\/www.googleapis.com\/auth\/drive\x22,60,\x22https:\/\/workstations.googleapis.com\x22\x5d,\x5bnull,null,null,null,null,null,\x5b\x5bnull,102163142\x5d,\x5bnull,102162558\x5d,\x5bnull,115965161\x5d,\x5bnull,70980719\x5d,\x5bnull,71639050\x5d,\x5bnull,44537330\x5d,\x5bnull,44536920\x5d,\x5bnull,18800188\x5d,\x5bnull,103035570\x5d,\x5bnull,105075601\x5d,\x5bnull,44490095\x5d\x5d,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,1,null,null,1,null,null,null,null,1,null,null,null,null,1,null,1,null,null,1,null,null,1,1,1,null,1,1,1,null,null,1,null,null,null,null,1\x5d,null,\x5b\x5b\x22xtemp.xemail@gmail.com\x22,\x221\x22,\x22Temp\x22\x5d,\x5b\x22incogito.acc@gmail.com\x22,\x222\x22,\x22Incog\x22\x5d,\x5b\x22rndm.grpe@gmail.com\x22,\x223\x22,\x22Rohan\x22\x5d,\x5b\x22rohansalemisapro@gmail.com\x22,\x224\x22,\x22rohan\x22,\x22salem\x22\x5d,\x5b\x22rohansalem8@gmail.com\x22,\x225\x22,\x22Rohan\x22,\x22Salem\x22\x5d,\x5b\x22rndm.ptato@gmail.com\x22,\x226\x22,\x22Potato\x22\x5d\x5d,\x5b\x5b\x22gcr.io\/cloudshell-images\/cloudshell:latest\x22,\x22gcr.io\/cloudrun\/button:latest\x22,\x22gcr.io\/ds-artifacts-cloudshell\/deploystack_custom_image\x22\x5d,\x5b\x22github.com\/google\/\x22,\x22github.com\/googlestaging\/\x22,\x22github.com\/googleapis\/\x22,\x22github.com\/googlecloudplatform\/\x22,\x22github.com\/googlemaps\/\x22,\x22github.com\/googleworkspace\/\x22,\x22github.com\/terraform-google-modules\/\x22,\x22go.googlesource.com\/\x22\x5d,\x5b\x22github.com\/GoogleContainerTools\/skaffold\x22\x5d\x5d,\x5b\x5d,\x5b\x5b\x22github.com\/OnlineHacKing\/\x22,\x22github.com\/Bhaviktutorials\/\x22,\x22github.com\/sherlock-project\/\x22,\x22github.com\/htr-tech\/zphisher\/\x22,\x22github.com\/soxoj\/maigret\/\x22,\x22github.com\/fikrado\/\x22\x5d,\x5b\x22github.com\/JoelGMSec\/Cloudtopolis\x22\x5d\x5d\x5d";
+      (window as any).CSH_LOAD_T0 = Date.now();
+
+      // Define _DumpException function (required by Cloud Shell)
+      (window as any)._DumpException = function(e: any) {
+        console.error('Cloud Shell error:', e);
+      };
+
+      // Intercept fetch/XMLHttpRequest to proxy Cloud Shell API calls
+      // MUST be set up BEFORE Cloud Shell scripts load
+      setupCloudShellProxy();
+
+      // Set base href (required by Cloud Shell)
+      const baseElement = document.querySelector('base');
+      if (!baseElement) {
+        const base = document.createElement('base');
+        base.href = '/';
+        document.head.insertBefore(base, document.head.firstChild);
       }
-      
-      cloudShellIframe.onload = () => {
-        console.log('Azalea Cloud Shell loaded in iframe');
-        console.log('OAuth will work naturally with Google\'s domain');
+
+      // Load the main Cloud Shell script from gstatic
+      const script = document.createElement('script');
+      script.src = 'https://www.gstatic.com/_/cloudshell-scs/_/js/k=cloudshell-scs.csh.en.AYpRfyRWRGQ.es5.O/am=AAAD/d=1/rs=AKpenNb23Sc0ShEzLJnDAJFR8jOOG-NU6A/m=cloudshell';
+      script.async = false; // Load synchronously to ensure proper initialization order
+      script.onload = () => {
+        (window as any).CSH_LOAD_T1 = Date.now();
+        console.log('Azalea Cloud Shell loaded (using real Google Cloud Shell scripts)');
+        console.log('API requests will be proxied through Azalea backend');
         
-        // Apply branding after iframe loads
+        // Give Cloud Shell a moment to initialize
         setTimeout(() => {
-          applyAzaleaBranding();
           resolve();
-        }, 1000);
+        }, 500);
       };
-      
-      cloudShellIframe.onerror = () => {
-        reject(new Error('Failed to load Cloud Shell iframe'));
+      script.onerror = (error) => {
+        console.error('Failed to load Cloud Shell scripts:', error);
+        reject(new Error('Failed to load Cloud Shell scripts'));
       };
-      
-      // Add auth iframe first (invisible, for cookie acquisition)
-      document.body.appendChild(authIframe);
-      
-      // Add main Cloud Shell iframe
-      containerRef.current.appendChild(cloudShellIframe);
+      document.head.appendChild(script);
     });
   };
 
