@@ -1,6 +1,6 @@
-# CoolVM for Vercel
+# Haskell Azaleae for Vercel
 
-Modernized CoolVM running on Vercel via vercel-hs.
+Modernized CoolVM (Haskell Azaleae) running on Vercel via vercel-hs.
 
 ## Building
 

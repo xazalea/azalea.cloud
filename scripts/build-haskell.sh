@@ -1,10 +1,10 @@
 #!/bin/bash
-# Build CoolVM for Vercel
+# Build Haskell Azaleae for Vercel
 # This script builds the Haskell VM binary for deployment
 
 set -e
 
-echo "=== Building CoolVM for Vercel ==="
+echo "=== Building Haskell Azaleae for Vercel ==="
 
 # Check if cabal is installed
 if ! command -v cabal &> /dev/null; then
@@ -18,16 +18,16 @@ if ! command -v cabal &> /dev/null; then
     ghcup set cabal 3.10.1.0
 fi
 
-cd coolvm
+cd haskell-azaleae
 
 echo "Installing dependencies..."
 cabal update
 cabal install --dependencies-only
 
-echo "Building CoolVM..."
+echo "Building Haskell Azaleae..."
 cabal build
 
-echo "=== CoolVM build complete ==="
+echo "=== Haskell Azaleae build complete ==="
 echo ""
 echo "Binary location: dist/build/coolvm/coolvm"
 echo ""

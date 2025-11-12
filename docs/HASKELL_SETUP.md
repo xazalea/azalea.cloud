@@ -13,7 +13,7 @@ The Haskell VM runs on Vercel using a hybrid approach:
 ## Project Structure
 
 ```
-coolvm/
+haskell-azaleae/
 ├── src/
 │   ├── CoolVM.hs      # Core VM implementation
 │   └── Main.hs        # Entry point for Vercel
@@ -33,8 +33,8 @@ source ~/.ghcup/env
 ghcup install ghc 9.6.3
 ghcup install cabal 3.10.1.0
 
-# Build CoolVM
-cd coolvm
+# Build Haskell Azaleae
+cd haskell-azaleae
 cabal update
 cabal install --dependencies-only
 cabal build
@@ -46,7 +46,7 @@ echo '{"action":"create"}' | dist/build/coolvm/coolvm
 ### Using Build Script
 
 ```bash
-npm run build:coolvm
+npm run build:haskell
 ```
 
 ## Vercel Deployment
@@ -54,7 +54,7 @@ npm run build:coolvm
 ### Automatic Build
 
 Vercel will automatically:
-1. Run `npm run build:all` (which includes `build:coolvm`)
+1. Run `npm run build:all` (which includes `build:haskell`)
 2. Build the Haskell binary
 3. Deploy the TypeScript wrapper that calls it
 
@@ -66,8 +66,8 @@ If you need to build manually:
 # Build everything
 npm run build:all
 
-# Or just CoolVM
-npm run build:coolvm
+# Or just Haskell Azaleae
+npm run build:haskell
 ```
 
 ## How It Works
@@ -136,7 +136,7 @@ If the Haskell build fails:
 
 If the binary is not found at runtime:
 - Verify build completed successfully
-- Check binary path: `coolvm/dist/build/coolvm/coolvm`
+- Check binary path: `haskell-azaleae/dist/build/coolvm/coolvm`
 - The system will automatically fall back to TypeScript
 
 ### Runtime Errors

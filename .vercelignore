@@ -4,7 +4,7 @@ dist
 *.log
 webvm/node_modules
 webvm/dist
-coolvm/dist
-coolvm/.cabal
-coolvm/cabal.sandbox.config
+haskell-azaleae/dist
+haskell-azaleae/.cabal
+haskell-azaleae/cabal.sandbox.config
 

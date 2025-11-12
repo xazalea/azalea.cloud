@@ -3,12 +3,6 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "vite",
-  "functions": {
-    "api/coolvm": {
-      "runtime": "@vercel/node",
-      "maxDuration": 30
-    }
-  },
   "rewrites": [
     {
       "source": "/cloudshell/:path*",

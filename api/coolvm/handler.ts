@@ -12,7 +12,7 @@ const execAsync = promisify(exec);
  */
 
 // Path to compiled Haskell binary
-const COOLVM_BINARY = path.join(process.cwd(), 'coolvm', 'dist', 'build', 'coolvm', 'coolvm');
+const COOLVM_BINARY = path.join(process.cwd(), 'haskell-azaleae', 'dist', 'build', 'coolvm', 'coolvm');
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
