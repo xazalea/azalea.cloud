@@ -166,11 +166,39 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         // Use UV proxy if available (better cookie handling)
         if ((window as any).__uv$config && (window as any).__uv$config.encodeUrl) {
           try {
+            // Check if Ultraviolet is available
+            if (typeof (window as any).Ultraviolet === 'undefined') {
+              throw new Error('Ultraviolet not loaded');
+            }
+            
             const encodedUrl = (window as any).__uv$config.encodeUrl(targetUrl);
             const proxyUrl = (window as any).__uv$config.prefix + encodedUrl;
             
-            // UV proxy handles everything including cookies
-            return originalFetch(proxyUrl, init);
+            console.log('[Cloud Shell] Proxying through UV:', targetUrl.substring(0, 80) + '...', '->', proxyUrl.substring(0, 80) + '...');
+            
+            // UV proxy handles everything including cookies via service worker
+            // The service worker will intercept this and proxy it through WISP/BareClient
+            // Make sure the request goes through the service worker by using the UV prefix
+            const fetchInit: RequestInit = {
+              ...init,
+              credentials: 'include', // Important for cookies
+              mode: 'cors', // Allow CORS
+            };
+            
+            try {
+              const response = await originalFetch(proxyUrl, fetchInit);
+              
+              // If UV proxy returns an error, fall back to API proxy
+              if (!response.ok && response.status >= 500) {
+                console.warn('[Cloud Shell] UV proxy returned error, falling back to API proxy');
+                throw new Error('UV proxy error');
+              }
+              
+              return response;
+            } catch (uvError) {
+              console.warn('[Cloud Shell] UV proxy request failed, falling back to API proxy:', uvError);
+              throw uvError; // Will be caught by outer catch and use API proxy
+            }
           } catch (e) {
             console.warn('[Cloud Shell] UV proxy encoding failed, falling back to API proxy:', e);
           }
@@ -268,6 +296,11 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         // Use UV proxy if available (better cookie handling)
         if ((window as any).__uv$config && (window as any).__uv$config.encodeUrl) {
           try {
+            // Check if Ultraviolet is available
+            if (typeof (window as any).Ultraviolet === 'undefined') {
+              throw new Error('Ultraviolet not loaded');
+            }
+            
             const encodedUrl = (window as any).__uv$config.encodeUrl(targetUrl);
             const proxyUrl = (window as any).__uv$config.prefix + encodedUrl;
             
@@ -276,6 +309,7 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
             (this as any)._proxyUrl = proxyUrl;
             (this as any)._method = method;
             (this as any)._useUVProxy = true;
+            (this as any)._withCredentials = true; // Important for cookies
             return originalXHROpen.call(this, method, proxyUrl, async ?? true, username ?? null, password ?? null);
           } catch (e) {
             console.warn('[Cloud Shell] UV proxy encoding failed for XHR, falling back to API proxy:', e);
@@ -306,11 +340,15 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
     
     XMLHttpRequest.prototype.send = function(body?: Document | XMLHttpRequestBodyInit | null) {
       if ((this as any)._proxied) {
-        // Add X-Original-URL header for proxy requests
-        // Note: XHR will go through the proxy URL, and if Vercel returns 500,
-        // the fallback service will handle it at the fetch level for fetch requests.
-        // For XHR, we rely on the proxy URL working, but most Cloud Shell requests use fetch.
-        this.setRequestHeader('X-Original-URL', (this as any)._originalUrl);
+        // Set withCredentials for UV proxy requests (important for cookies)
+        if ((this as any)._useUVProxy && (this as any)._withCredentials) {
+          this.withCredentials = true;
+        }
+        
+        // Add X-Original-URL header for API proxy requests (not needed for UV proxy)
+        if (!(this as any)._useUVProxy) {
+          this.setRequestHeader('X-Original-URL', (this as any)._originalUrl);
+        }
       }
       return originalXHRSend.call(this, body);
     };
@@ -437,7 +475,7 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
 
       // Load UV proxy scripts for better cookie handling
       // UV proxy uses WISP (WebSocket-based proxy) which handles cookies much better
-      const loadUVProxy = () => {
+      const loadUVProxy = async () => {
         return new Promise<void>((resolve) => {
           // Load UV bundle first (synchronously to ensure it's available)
           const uvBundle = document.createElement('script');
@@ -449,12 +487,47 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
           uvConfig.src = '/uv-proxy/uv/uv.config.js';
           uvConfig.async = false;
           
-          uvConfig.onload = () => {
+          uvConfig.onload = async () => {
             // Wait a bit for UV to initialize
-            setTimeout(() => {
-              console.log('[Cloud Shell] UV proxy loaded and ready');
-              resolve();
-            }, 100);
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            // Register service worker for UV proxy
+            try {
+              if ('serviceWorker' in navigator && (window as any).__uv$config) {
+                const swUrl = (window as any).__uv$config.sw || '/uv-proxy/uv/sw.js';
+                const registration = await navigator.serviceWorker.register(swUrl, {
+                  scope: '/uv-proxy/uv/'
+                });
+                console.log('[Cloud Shell] UV proxy service worker registered:', registration.scope);
+                
+                // Wait for service worker to be ready
+                if (registration.installing) {
+                  registration.installing.addEventListener('statechange', (e) => {
+                    const sw = e.target as ServiceWorker;
+                    console.log('[Cloud Shell] Service worker state:', sw.state);
+                  });
+                } else if (registration.waiting) {
+                  console.log('[Cloud Shell] Service worker waiting');
+                } else if (registration.active) {
+                  console.log('[Cloud Shell] Service worker active');
+                }
+              }
+            } catch (swError) {
+              console.warn('[Cloud Shell] Service worker registration failed:', swError);
+            }
+            
+            // Set up WISP connection (needed for UV proxy to work)
+            try {
+              // Import WISP connection setup
+              const wispUrl = 'wss://wisp.rhw.one/';
+              // The WISP connection will be set up by UV's handler when requests are made
+              console.log('[Cloud Shell] UV proxy ready (WISP will connect on first request)');
+            } catch (wispError) {
+              console.warn('[Cloud Shell] WISP setup warning:', wispError);
+            }
+            
+            console.log('[Cloud Shell] UV proxy loaded and ready');
+            resolve();
           };
           
           uvBundle.onerror = () => {
