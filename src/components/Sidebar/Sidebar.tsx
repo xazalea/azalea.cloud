@@ -14,6 +14,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onTabChange, activeTab = 'term
 
   const tabs = [
     { id: 'terminal', label: 'Terminal', icon: 'terminal' },
+    { id: 'vm-provisioner', label: 'VM Provisioner', icon: 'dns' },
   ];
 
   const providerOrder: ProviderType[] = [

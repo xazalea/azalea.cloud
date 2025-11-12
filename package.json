@@ -16,7 +16,9 @@
     "set-metadata": "bash scripts/set_metadata.sh",
     "schedule-jobs": "bash scripts/schedule_jobs.sh",
     "git-push": "bash scripts/git-push.sh",
-    "git-pull": "bash scripts/git-pull.sh"
+    "git-pull": "bash scripts/git-pull.sh",
+    "deploy": "bash scripts/deploy/deploy.sh",
+    "setup:infrastructure": "bash scripts/deploy/setup-infrastructure.sh"
   },
   "dependencies": {
     "@vercel/sandbox": "^1.0.2",

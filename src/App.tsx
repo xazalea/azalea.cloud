@@ -15,6 +15,7 @@ import { DesktopViewer } from './components/DesktopViewer/DesktopViewer';
 import { ProgressIndicator, ProgressStep } from './components/ProgressIndicator/ProgressIndicator';
 import { NotificationSystem, useNotifications } from './components/Notifications/NotificationSystem';
 import { DesktopService } from './services/desktopService';
+import { VMProvisioner } from './components/VMProvisioner/VMProvisioner';
 import { TokenRefreshManager } from '../lib/auth/metadataAuth';
 import { AuthKeyService } from '../lib/auth/authKeyService';
 import { startWorker } from './services/workerService';
@@ -260,6 +261,14 @@ function AppContent() {
             />
           );
       }
+    }
+
+    // VM Provisioner tab
+    if (activeTab === 'vm-provisioner') {
+      return <VMProvisioner onVMReady={(vmId, vncUrl) => {
+        setDesktopUrl(vncUrl);
+        setDesktopOpen(true);
+      }} />;
     }
 
     // Only terminal tab is available
