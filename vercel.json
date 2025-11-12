@@ -1,34 +1,14 @@
 {
-  "version": 2,
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "framework": "vite",
-  "installCommand": "npm install",
+  "buildCommand": "npm run build:all",
   "devCommand": "npm run dev",
-  "headers": [
-    {
-      "source": "/uv-proxy/uv/sw.js",
-      "headers": [
-        {
-          "key": "Service-Worker-Allowed",
-          "value": "/"
-        },
-        {
-          "key": "Content-Type",
-          "value": "application/javascript"
-        }
-      ]
-    },
-    {
-      "source": "/uv-proxy/uv/(.*)",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        }
-      ]
+  "installCommand": "npm install",
+  "framework": "vite",
+  "functions": {
+    "api/coolvm": {
+      "runtime": "@vercel/node",
+      "maxDuration": 30
     }
-  ],
+  },
   "rewrites": [
     {
       "source": "/cloudshell/:path*",
@@ -51,8 +31,31 @@
       "destination": "/api/backend/desktop/start"
     },
     {
+      "source": "/api/coolvm",
+      "destination": "/api/coolvm"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, DELETE, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization, X-Original-URL"
+        }
+      ]
     }
   ]
 }

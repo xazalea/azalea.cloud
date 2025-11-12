@@ -25,46 +25,6 @@ export const ProviderSelector: React.FC = () => {
         <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text }}>
           Provider
         </div>
-        {currentProvider === 'azalea-super' && (
-          <div
-            style={{
-              fontSize: '11px',
-              padding: '4px 8px',
-              backgroundColor: theme.accent + '20',
-              color: theme.accent,
-              borderRadius: '4px',
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-          >
-            <span className="material-icons" style={{ fontSize: '14px' }}>
-              bolt
-            </span>
-            SUPER MODE
-          </div>
-        )}
-        {currentProvider === 'azalea-ultra' && (
-          <div
-            style={{
-              fontSize: '11px',
-              padding: '4px 8px',
-              backgroundColor: theme.accent + '20',
-              color: theme.accent,
-              borderRadius: '4px',
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-          >
-            <span className="material-icons" style={{ fontSize: '14px' }}>
-              rocket_launch
-            </span>
-            ULTRA MODE
-          </div>
-        )}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {Object.values(providers).map((provider) => {

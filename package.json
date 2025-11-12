@@ -18,7 +18,9 @@
     "git-push": "bash scripts/git-push.sh",
     "git-pull": "bash scripts/git-pull.sh",
     "deploy": "bash scripts/deploy/deploy.sh",
-    "setup:infrastructure": "bash scripts/deploy/setup-infrastructure.sh"
+    "setup:infrastructure": "bash scripts/deploy/setup-infrastructure.sh",
+    "build:coolvm": "bash scripts/build-coolvm.sh",
+    "build:all": "npm run build:webvm && npm run build:coolvm && npm run build"
   },
   "dependencies": {
     "@vercel/sandbox": "^1.0.2",

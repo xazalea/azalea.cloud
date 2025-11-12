@@ -1,0 +1,17 @@
+dist/
+.cabal-sandbox/
+cabal.sandbox.config
+*.hi
+*.o
+*.dyn_o
+*.dyn_hi
+.hpc
+.hsenv
+.cabal-sandbox/
+cabal.project.local
+*.prof
+*.aux
+*.hp
+*.ps
+*.pdf
+

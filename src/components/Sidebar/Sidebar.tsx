@@ -11,6 +11,23 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ onTabChange, activeTab = 'terminal' }) => {
   const { theme } = useTheme();
   const { currentProvider, setProvider, providers } = useProvider();
+  const [webVMAvailable, setWebVMAvailable] = React.useState(true);
+
+  // Check WebVM availability
+  React.useEffect(() => {
+    const checkWebVM = async () => {
+      try {
+        // Try to check if WebVM is available
+        const response = await fetch('/api/backend/health');
+        if (!response.ok) {
+          setWebVMAvailable(false);
+        }
+      } catch {
+        setWebVMAvailable(false);
+      }
+    };
+    checkWebVM();
+  }, []);
 
   const tabs = [
     { id: 'terminal', label: 'Terminal', icon: 'terminal' },
@@ -19,11 +36,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ onTabChange, activeTab = 'term
 
   const providerOrder: ProviderType[] = [
     'azalea-cloud',
-    'azalea-sshx',
     'azalea-local',
-    'azalea-super',
-    'azalea-ultra',
+    'azalea-coolvm',
   ];
+
+  // Filter providers based on availability
+  const availableProviders = providerOrder.filter(providerId => {
+    // If it's azalea-local (WebVM), check if WebVM is available
+    if (providerId === 'azalea-local') {
+      return webVMAvailable;
+    }
+    return true;
+  });
 
   return (
     <aside
@@ -87,13 +111,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ onTabChange, activeTab = 'term
           Providers
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {providerOrder.map((providerId) => {
+          {availableProviders.map((providerId) => {
             const provider = providers[providerId];
             if (!provider || !provider.enabled) return null;
             
             const isActive = currentProvider === providerId;
-            const isSuper = providerId === 'azalea-super';
-            const isUltra = providerId === 'azalea-ultra';
             
             return (
               <button
@@ -159,11 +181,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onTabChange, activeTab = 'term
                   <div style={{ fontSize: '14px', fontWeight: isActive ? 600 : 500 }}>
                     {provider.name}
                   </div>
-                  {(isSuper || isUltra) && (
-                    <div style={{ fontSize: '10px', opacity: 0.8, marginTop: '2px' }}>
-                      {isSuper ? 'SUPER MODE' : 'ULTRA MODE'}
-                    </div>
-                  )}
                 </div>
                 
                 {/* Active Indicator */}

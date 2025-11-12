@@ -1,0 +1,10 @@
+node_modules
+dist
+.cache
+*.log
+webvm/node_modules
+webvm/dist
+coolvm/dist
+coolvm/.cabal
+coolvm/cabal.sandbox.config
+

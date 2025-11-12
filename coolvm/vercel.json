@@ -1,0 +1,10 @@
+{
+  "buildCommand": "cabal build",
+  "functions": {
+    "api/coolvm": {
+      "runtime": "haskell",
+      "handler": "coolvm"
+    }
+  }
+}
+

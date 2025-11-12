@@ -7,10 +7,7 @@ import { Terminal } from './components/Terminal/Terminal';
 import { CloudShellLayout } from './components/CloudShell/CloudShellLayout';
 import { LandingPage } from './components/LandingPage/LandingPage';
 import { WebVMLocal } from './components/WebVM/WebVMLocal';
-import { WebVMSSHX } from './components/WebVM/WebVMSSHX';
-import { WebVMWithBackend } from './components/WebVM/WebVMWithBackend';
-import { SuperProvider } from './components/SuperProvider/SuperProvider';
-import { UltraProvider } from './components/UltraProvider/UltraProvider';
+import { CoolVM } from './components/CoolVM/CoolVM';
 import { DesktopViewer } from './components/DesktopViewer/DesktopViewer';
 import { ProgressIndicator, ProgressStep } from './components/ProgressIndicator/ProgressIndicator';
 import { NotificationSystem, useNotifications } from './components/Notifications/NotificationSystem';
@@ -245,14 +242,10 @@ function AppContent() {
               desktopLoading={desktopLoading}
             />
           );
-        case 'azalea-sshx':
-          return <WebVMSSHX />;
         case 'azalea-local':
           return <WebVMLocal />;
-        case 'azalea-super':
-          return <SuperProvider />;
-        case 'azalea-ultra':
-          return <UltraProvider />;
+        case 'azalea-coolvm':
+          return <CoolVM />;
         default:
           return (
             <CloudShellLayout

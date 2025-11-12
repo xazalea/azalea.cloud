@@ -1,0 +1,13 @@
+{
+  "name": "coolvm-vercel",
+  "version": "2.0.0",
+  "description": "CoolVM Haskell runtime for Vercel",
+  "scripts": {
+    "build": "cabal build",
+    "install": "cabal install --dependencies-only",
+    "clean": "cabal clean"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
+
