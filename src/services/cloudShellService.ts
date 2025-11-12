@@ -189,14 +189,29 @@ export class CloudShellService {
   private async executeCommandViaBackend(command: string): Promise<CommandResult> {
     try {
       // Try to execute via backend API
-      const response = await fetch('http://localhost:3001/api/command/execute', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ command }),
-      });
+      // Try WebVM backend first, then browser backend
+      let response: Response | null = null;
+      try {
+        response = await fetch('http://localhost:3001/api/command/execute', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ command }),
+          signal: AbortSignal.timeout(5000),
+        });
+      } catch {
+        // WebVM backend not available
+      }
+      
+      // Fallback to browser backend if WebVM not available
+      if (!response || !response.ok) {
+        // Browser backend doesn't support command execution yet
+        // Fall back to simulation
+        return await this.simulateCommand(command);
+      }
 
+      // Process successful response
       if (response.ok) {
         const data = await response.json();
         return {

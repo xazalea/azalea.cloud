@@ -136,6 +136,7 @@ class WebVMManager {
 
   /**
    * Start periodic health checks
+   * Uses browser backend fallback to avoid connection errors
    */
   startHealthCheck(): void {
     if (this.healthCheckInterval) {
@@ -143,6 +144,7 @@ class WebVMManager {
     }
 
     this.healthCheckInterval = setInterval(async () => {
+      // Use checkAvailability which already has browser backend fallback
       await this.checkAvailability();
     }, HEALTH_CHECK_INTERVAL);
   }

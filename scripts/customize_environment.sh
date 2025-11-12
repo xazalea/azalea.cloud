@@ -34,31 +34,99 @@ ENV_EOF
 mkdir -p "$HOME/.azalea/bin"
 log "Created ~/.azalea/bin directory"
 
-# 3. Install/update session keep-alive script
-log "Setting up session keep-alive..."
+# 3. Install/update enhanced session keep-alive script with multiple methods
+log "Setting up enhanced session keep-alive with multiple methods..."
 cat > "$HOME/.azalea/bin/keep-alive.sh" << 'KEEPALIVE_EOF'
 #!/bin/bash
-# Session keep-alive script - prevents Cloud Shell from timing out
-# Runs in background to maintain active session
+# Enhanced Session Keep-Alive Script
+# Uses multiple methods to prevent Cloud Shell from timing out
+# Methods: File system, Terminal activity, Network activity, Process activity
 
-INTERVAL=${KEEP_ALIVE_INTERVAL:-300}  # Default: 5 minutes
+INTERVAL=${KEEP_ALIVE_INTERVAL:-180}  # Default: 3 minutes (more frequent for better reliability)
 LOG_FILE="$HOME/.azalea/keep-alive.log"
+ACTIVITY_DIR="$HOME/.azalea"
 
-mkdir -p "$(dirname "$LOG_FILE")"
+mkdir -p "$ACTIVITY_DIR"
 
-while true; do
-    # Simple activity to keep session alive
-    touch "$HOME/.azalea/.last_activity"
+# Method 1: File System Activity
+method_filesystem() {
+    touch "$ACTIVITY_DIR/.last_activity"
+    date > "$ACTIVITY_DIR/.heartbeat" 2>/dev/null || true
+    echo "$(date +%s)" > "$ACTIVITY_DIR/.timestamp" 2>/dev/null || true
+}
+
+# Method 2: Terminal Activity (simulate command execution)
+method_terminal() {
+    # Run lightweight commands that simulate user activity
+    : > "$ACTIVITY_DIR/.terminal_activity" 2>/dev/null || true
+    # Use built-in commands that don't require network
+    true 2>/dev/null
+    echo "$(date)" > "$ACTIVITY_DIR/.terminal_heartbeat" 2>/dev/null || true
+}
+
+# Method 3: Network Activity (lightweight API calls)
+method_network() {
+    # Check metadata server (lightweight, always available in GCP)
+    curl -s -H "Metadata-Flavor: Google" \
+        "http://metadata.google.internal/computeMetadata/v1/instance/id" \
+        > "$ACTIVITY_DIR/.network_activity" 2>/dev/null || true
     
-    # Optionally: Run a lightweight command
-    # This helps maintain the session
-    date > "$HOME/.azalea/.heartbeat" 2>/dev/null || true
+    # Alternative: Check localhost
+    curl -s "http://localhost:8080" > /dev/null 2>&1 || true
+}
+
+# Method 4: Process Activity (ensure we're running)
+method_process() {
+    # Write PID to file
+    echo $$ > "$ACTIVITY_DIR/.keepalive_pid" 2>/dev/null || true
+    
+    # Check if we're still the active process
+    if [ -f "$ACTIVITY_DIR/.keepalive_pid" ]; then
+        OLD_PID=$(cat "$ACTIVITY_DIR/.keepalive_pid" 2>/dev/null || echo "")
+        if [ -n "$OLD_PID" ] && [ "$OLD_PID" != "$$" ]; then
+            # Another instance might be running, but continue anyway
+            :
+        fi
+    fi
+}
+
+# Method 5: Environment Activity (update environment variables)
+method_environment() {
+    export AZALEA_LAST_KEEPALIVE=$(date +%s)
+    # Write to a file that can be sourced
+    echo "export AZALEA_LAST_KEEPALIVE=$(date +%s)" > "$ACTIVITY_DIR/.env_activity" 2>/dev/null || true
+}
+
+# Method 6: Shell Activity (background job activity)
+method_shell() {
+    # Create a background job marker
+    jobs > "$ACTIVITY_DIR/.shell_jobs" 2>/dev/null || true
+}
+
+# Main keep-alive loop with all methods
+while true; do
+    TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+    
+    # Execute all methods in parallel (using background jobs)
+    method_filesystem &
+    method_terminal &
+    method_network &
+    method_process &
+    method_environment &
+    method_shell &
+    
+    # Wait for all background jobs to complete
+    wait
+    
+    # Update master activity file
+    echo "$TIMESTAMP" > "$ACTIVITY_DIR/.master_activity"
     
     # Log activity (optional, can be disabled for stealth)
     if [ "${KEEP_ALIVE_VERBOSE:-false}" = "true" ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Keep-alive ping" >> "$LOG_FILE"
+        echo "[$TIMESTAMP] Keep-alive ping (all methods)" >> "$LOG_FILE"
     fi
     
+    # Sleep before next cycle
     sleep "$INTERVAL"
 done
 KEEPALIVE_EOF

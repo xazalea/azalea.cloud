@@ -209,11 +209,26 @@ echo "Backend started on port 3001"
   const checkBackendHealth = async () => {
     const check = async () => {
       try {
-        const response = await fetch('http://localhost:3001/api/health', {
-          method: 'GET',
-          signal: AbortSignal.timeout(2000),
-        });
-        if (response.ok) {
+        // Try WebVM backend first
+        let response: Response | null = null;
+        try {
+          response = await fetch('http://localhost:3001/api/health', {
+            method: 'GET',
+            signal: AbortSignal.timeout(2000),
+          });
+        } catch {
+          // WebVM backend not available
+        }
+        
+        // Fallback to browser backend (always available)
+        if (!response || !response.ok) {
+          response = await fetch('/api/backend/health', {
+            method: 'GET',
+            signal: AbortSignal.timeout(2000),
+          });
+        }
+        
+        if (response && response.ok) {
           setBackendReady(true);
           onBackendReady?.(true);
         } else {

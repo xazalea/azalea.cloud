@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTheme } from '../../theme/theme';
 import { apiFallback, fetchWithFallback, APIFallbackError } from '../../services/apiFallbackService';
+import { SessionKeepAlive } from '../../services/sessionKeepAlive';
 
 interface RealCloudShellProps {
   onDesktopClick?: () => void;
@@ -24,6 +25,7 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
 
   useEffect(() => {
     let messageHandler: ((event: MessageEvent) => void) | null = null;
+    const keepAliveService = SessionKeepAlive.getInstance();
     
     const initializeCloudShell = async () => {
       try {
@@ -37,6 +39,21 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         
         setAuthStatus('authenticated');
         setLoading(false);
+        
+        // Start browser-based keep-alive service
+        console.log('[Cloud Shell] Starting browser-based session keep-alive...');
+        keepAliveService.start(180000); // 3 minutes interval
+        
+        // Try to inject keep-alive into Cloud Shell iframe
+        if (containerRef.current) {
+          const iframe = containerRef.current.querySelector('iframe');
+          if (iframe) {
+            // Wait a bit for Cloud Shell to fully load
+            setTimeout(() => {
+              keepAliveService.injectIntoCloudShell(iframe);
+            }, 10000);
+          }
+        }
       } catch (err) {
         console.error('Initialization error:', err);
         setError(err instanceof Error ? err.message : 'Initialization failed');
@@ -47,11 +64,13 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
 
     initializeCloudShell();
     
-    // Cleanup message handler on unmount
+    // Cleanup on unmount
     return () => {
       if (messageHandler) {
         window.removeEventListener('message', messageHandler);
       }
+      // Stop keep-alive service
+      keepAliveService.stop();
     };
   }, []);
 
@@ -185,8 +204,13 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
           return originalFetch(input, init);
         }
         
-        // Proxy ALL requests to shell.cloud.google.com through UV proxy
-        // UV proxy handles cookies and authentication much better
+        // Block or proxy play.google.com requests (Cloud Shell analytics)
+        if (urlStr.includes('play.google.com')) {
+          // Block analytics requests to avoid CORS errors
+          return new Response(null, { status: 204 }); // No Content
+        }
+      
+        // Proxy ALL requests to shell.cloud.google.com through API proxy
         if (urlStr.includes('shell.cloud.google.com') || urlStr.includes('/cloudshell/') || urlStr.includes('cloudshell.clients6.google.com')) {
           let targetUrl = urlStr;
           
@@ -202,41 +226,8 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
             }
           }
           
-          // Use UV proxy if available (better cookie handling)
-          if ((window as any).__uv$config && (window as any).__uv$config.encodeUrl && (window as any).Ultraviolet) {
-            try {
-            const encodedUrl = (window as any).__uv$config.encodeUrl(targetUrl);
-            const proxyUrl = (window as any).__uv$config.prefix + encodedUrl;
-            
-            // UV proxy handles everything including cookies via service worker
-            const fetchInit: RequestInit = {
-              ...init,
-              credentials: 'include', // Important for cookies
-              mode: 'cors', // Allow CORS
-            };
-            
-            try {
-              const response = await originalFetch(proxyUrl, fetchInit);
-              
-                // If UV proxy returns a server error, fall back to API proxy
-              if (!response.ok && response.status >= 500) {
-                console.warn('[Cloud Shell] UV proxy returned error, falling back to API proxy');
-                throw new Error('UV proxy error');
-              }
-              
-              return response;
-            } catch (uvError) {
-              console.warn('[Cloud Shell] UV proxy request failed, falling back to API proxy:', uvError);
-              throw uvError; // Will be caught by outer catch and use API proxy
-            }
-          } catch (e) {
-              // UV proxy encoding failed, fall through to API proxy
-            console.warn('[Cloud Shell] UV proxy encoding failed, falling back to API proxy:', e);
-          }
-        }
-        
-        // Fallback to our API proxy if UV proxy not available
-        let proxyPath = '';
+          // Use API proxy directly (UV proxy disabled due to service worker issues)
+          let proxyPath = '';
           try {
             const urlObj = new URL(targetUrl);
             proxyPath = urlObj.pathname + urlObj.search + urlObj.hash;
@@ -372,6 +363,12 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
           return originalXHROpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
         }
         
+        // Block play.google.com requests (Cloud Shell analytics)
+        if (urlStr.includes('play.google.com')) {
+          // Return a dummy URL that will fail gracefully
+          return originalXHROpen.call(this, method, 'about:blank', async ?? true, username ?? null, password ?? null);
+      }
+      
         // Proxy ALL Cloud Shell requests - both shell.cloud.google.com and our domain's /cloudshell/*
         if (urlStr.includes('shell.cloud.google.com') || urlStr.includes('/cloudshell/') || urlStr.includes('cloudshell.clients6.google.com')) {
           let targetUrl = urlStr;
@@ -388,26 +385,8 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
             }
           }
           
-          // Use UV proxy if available (better cookie handling)
-          if ((window as any).__uv$config && (window as any).__uv$config.encodeUrl && (window as any).Ultraviolet) {
-            try {
-            const encodedUrl = (window as any).__uv$config.encodeUrl(targetUrl);
-            const proxyUrl = (window as any).__uv$config.prefix + encodedUrl;
-            
-            (this as any)._proxied = true;
-            (this as any)._originalUrl = targetUrl;
-            (this as any)._proxyUrl = proxyUrl;
-            (this as any)._method = method;
-            (this as any)._useUVProxy = true;
-            (this as any)._withCredentials = true; // Important for cookies
-            return originalXHROpen.call(this, method, proxyUrl, async ?? true, username ?? null, password ?? null);
-          } catch (e) {
-            console.warn('[Cloud Shell] UV proxy encoding failed for XHR, falling back to API proxy:', e);
-          }
-        }
-        
-        // Fallback to our API proxy
-        let proxyPath = '';
+          // Use API proxy directly (UV proxy disabled)
+          let proxyPath = '';
           try {
             const urlObj = new URL(targetUrl);
             proxyPath = urlObj.pathname + urlObj.search + urlObj.hash;
@@ -469,24 +448,9 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         
         // Proxy Cloud Shell WebSocket connections
         if (urlStr.includes('shell.cloud.google.com') || urlStr.includes('cloudshell.clients6.google.com')) {
-          // For WebSockets, we need to use a different approach
-          // Try to use UV proxy if available
-          if ((window as any).__uv$config && (window as any).__uv$config.encodeUrl && (window as any).Ultraviolet) {
-            try {
-              const encodedUrl = (window as any).__uv$config.encodeUrl(urlStr);
-              const proxyUrl = (window as any).__uv$config.prefix + encodedUrl;
-              // Convert to WebSocket URL
-              const wsUrl = proxyUrl.replace(/^https?:\/\//, 'wss://').replace(/^http:\/\//, 'ws://');
-              console.log('[Cloud Shell] Proxying WebSocket through UV:', urlStr, '->', wsUrl);
-              return new originalWebSocket(wsUrl, protocols);
-            } catch (e) {
-              console.warn('[Cloud Shell] UV proxy encoding failed for WebSocket, using direct connection:', e);
-            }
-          }
-          
-          // For now, allow direct WebSocket connections (they may work if CORS allows)
-          // In the future, we could implement a WebSocket proxy
-          console.log('[Cloud Shell] WebSocket connection (may not work due to CORS):', urlStr);
+          // For now, allow direct WebSocket connections
+          // WebSocket proxying would require a more complex setup
+          console.log('[Cloud Shell] WebSocket connection:', urlStr);
           return new originalWebSocket(url, protocols);
         }
         
@@ -602,12 +566,12 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
       document.body.classList.add('csh-app-body', 'mat-app-background');
 
       // Set base href (required by Cloud Shell) - MUST be set before scripts load
-      const baseElement = document.querySelector('base');
-      if (!baseElement) {
-        const base = document.createElement('base');
-        base.href = '/';
-        document.head.insertBefore(base, document.head.firstChild);
-      }
+        const baseElement = document.querySelector('base');
+        if (!baseElement) {
+          const base = document.createElement('base');
+          base.href = '/';
+          document.head.insertBefore(base, document.head.firstChild);
+        }
 
       // Load CSS first (required for proper rendering)
       const loadCSS = (href: string): Promise<void> => {
@@ -624,107 +588,11 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         });
       };
 
-      // Load UV proxy scripts for better cookie handling
-      // UV proxy uses WISP (WebSocket-based proxy) which handles cookies much better
+      // UV proxy disabled - service worker has issues
+      // Using API proxy directly for better reliability
       const loadUVProxy = async (): Promise<boolean> => {
-        return new Promise<boolean>((resolve) => {
-          try {
-            // Check if UV is already loaded
-            if ((window as any).__uv$config && (window as any).Ultraviolet) {
-              console.log('[Cloud Shell] UV proxy already loaded');
-              resolve(true);
-              return;
-            }
-
-            // Load UV bundle first
-          const uvBundle = document.createElement('script');
-          uvBundle.src = '/uv-proxy/uv/uv.bundle.js';
-          uvBundle.async = false;
-            uvBundle.crossOrigin = 'anonymous';
-            
-            let bundleLoaded = false;
-            let configLoaded = false;
-            
-            const checkReady = () => {
-              if (bundleLoaded && configLoaded) {
-                // Wait for UV to initialize
-                setTimeout(async () => {
-                  try {
-                    if ((window as any).__uv$config && (window as any).Ultraviolet) {
-            // Register service worker for UV proxy
-                      if ('serviceWorker' in navigator) {
-            try {
-                const swUrl = (window as any).__uv$config.sw || '/uv-proxy/uv/sw.js';
-                const registration = await navigator.serviceWorker.register(swUrl, {
-                  scope: '/uv-proxy/uv/'
-                });
-                console.log('[Cloud Shell] UV proxy service worker registered:', registration.scope);
-                
-                          // Wait for service worker to be ready (up to 5 seconds)
-                          let waitCount = 0;
-                          const waitForSW = setInterval(() => {
-                            waitCount++;
-                            if (registration.active || waitCount > 10) {
-                              clearInterval(waitForSW);
-                              if (registration.active) {
-                                console.log('[Cloud Shell] Service worker active and ready');
-                              }
-                              resolve(true);
-                            }
-                          }, 500);
-            } catch (swError) {
-              console.warn('[Cloud Shell] Service worker registration failed:', swError);
-                          resolve(false); // Continue without service worker
-                        }
-                      } else {
-                        console.warn('[Cloud Shell] Service workers not supported');
-                        resolve(false);
-                      }
-                    } else {
-                      console.warn('[Cloud Shell] UV not properly initialized');
-                      resolve(false);
-                    }
-                  } catch (error) {
-                    console.warn('[Cloud Shell] UV initialization error:', error);
-                    resolve(false);
-                  }
-                }, 300);
-              }
-            };
-            
-            uvBundle.onload = () => {
-              bundleLoaded = true;
-              checkReady();
-          };
-          
-          uvBundle.onerror = () => {
-              console.warn('[Cloud Shell] UV proxy bundle failed to load');
-              resolve(false);
-            };
-            
-            // Load UV config
-            const uvConfig = document.createElement('script');
-            uvConfig.src = '/uv-proxy/uv/uv.config.js';
-            uvConfig.async = false;
-            uvConfig.crossOrigin = 'anonymous';
-            
-            uvConfig.onload = () => {
-              configLoaded = true;
-              checkReady();
-          };
-          
-          uvConfig.onerror = () => {
-              console.warn('[Cloud Shell] UV proxy config failed to load');
-              resolve(false);
-          };
-          
-          document.head.appendChild(uvBundle);
-          document.head.appendChild(uvConfig);
-          } catch (error) {
-            console.warn('[Cloud Shell] UV proxy setup error:', error);
-            resolve(false);
-          }
-        });
+        // UV proxy disabled until service worker issues are resolved
+        return false;
       };
       
       // Main loading sequence
@@ -739,14 +607,10 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
           ]);
           console.log('[Cloud Shell] CSS files loaded');
 
-          // Step 2: Load UV proxy (optional, but recommended)
-          console.log('[Cloud Shell] Loading UV proxy...');
-          const uvReady = await loadUVProxy();
-          if (uvReady) {
-            console.log('[Cloud Shell] UV proxy ready');
-          } else {
-            console.log('[Cloud Shell] UV proxy not available, will use API proxy fallback');
-          }
+          // Step 2: Skip UV proxy for now (service worker issues)
+          // UV proxy is disabled until service worker issues are resolved
+          console.log('[Cloud Shell] Skipping UV proxy (using API proxy directly)');
+          const uvReady = false; // Disabled for now
 
           // Step 3: Set up proxy interceptors (MUST be before Cloud Shell scripts load)
           console.log('[Cloud Shell] Setting up proxy interceptors...');
@@ -770,19 +634,40 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
             const scriptContent = await scriptResponse.text();
             
             // Create and inject script
-            const script = document.createElement('script');
+        const script = document.createElement('script');
             script.textContent = scriptContent;
             script.async = false;
             
-            script.onload = () => {
-              (window as any).CSH_LOAD_T1 = Date.now();
+        script.onload = () => {
+          (window as any).CSH_LOAD_T1 = Date.now();
               const loadTime = ((window as any).CSH_LOAD_T1 - (window as any).CSH_LOAD_T0) / 1000;
               console.log(`[Cloud Shell] Main script loaded in ${loadTime.toFixed(2)}s`);
               console.log('[Cloud Shell] Azalea Cloud Shell initialized');
               console.log('[Cloud Shell] API requests will be proxied through', uvReady ? 'UV proxy' : 'API proxy');
               
+              // Inject keep-alive script into Cloud Shell context
+              try {
+                // Inject server-side keep-alive setup script
+                const keepAliveScript = `
+                  (function() {
+                    console.log('[Cloud Shell] Injecting keep-alive setup...');
+                    // This will be executed in Cloud Shell context
+                    // The actual keep-alive will be set up via .customize_environment script
+                    if (typeof window !== 'undefined') {
+                      window.__azaleaKeepAliveEnabled = true;
+                      console.log('[Cloud Shell] Keep-alive enabled in Cloud Shell context');
+                    }
+                  })();
+                `;
+                const keepAliveElement = document.createElement('script');
+                keepAliveElement.textContent = keepAliveScript;
+                document.head.appendChild(keepAliveElement);
+              } catch (e) {
+                console.warn('[Cloud Shell] Failed to inject keep-alive script:', e);
+              }
+              
               // Give Cloud Shell a moment to initialize and render
-              setTimeout(() => {
+          setTimeout(() => {
                 // Check if Cloud Shell has initialized
                 const rootElement = document.querySelector('cloud-shell-root');
                 if (rootElement && rootElement.children.length > 0) {
@@ -790,16 +675,16 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
                 } else {
                   console.warn('[Cloud Shell] Cloud Shell UI not yet rendered, but script loaded');
                 }
-                resolve();
+            resolve();
               }, 1000);
-            };
+        };
             
-            script.onerror = (error) => {
+        script.onerror = (error) => {
               console.error('[Cloud Shell] Failed to execute main script:', error);
               reject(new Error('Failed to execute Cloud Shell script'));
-            };
+        };
             
-            document.head.appendChild(script);
+        document.head.appendChild(script);
           } catch (fetchError) {
             console.error('[Cloud Shell] Failed to fetch main script:', fetchError);
             reject(new Error(`Failed to load Cloud Shell script: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`));

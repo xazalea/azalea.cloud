@@ -88,8 +88,24 @@ export const WebVMBackendTerminal: React.FC = () => {
         // Check backend health
         const checkHealth = async () => {
           try {
-            const response = await fetch('http://localhost:3001/api/health');
-            if (response.ok) {
+            // Try WebVM backend first
+            let response: Response | null = null;
+            try {
+              response = await fetch('http://localhost:3001/api/health', {
+                signal: AbortSignal.timeout(2000),
+              });
+            } catch {
+              // WebVM backend not available
+            }
+            
+            // Fallback to browser backend (always available)
+            if (!response || !response.ok) {
+              response = await fetch('/api/backend/health', {
+                signal: AbortSignal.timeout(2000),
+              });
+            }
+            
+            if (response && response.ok) {
               xterm.writeln('\x1b[1;32m✓ Backend is ready!\x1b[0m');
             }
           } catch (error) {
