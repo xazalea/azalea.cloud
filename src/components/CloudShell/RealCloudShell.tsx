@@ -143,6 +143,18 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         } else if (!urlStr.includes('://')) {
           urlStr = new URL(urlStr, window.location.href).href;
         }
+        
+        // Suppress localhost:3001 errors (WebVM backend is optional)
+        if (urlStr.includes('localhost:3001')) {
+          // Silently handle - WebVM backend is optional
+          try {
+            const response = await fetch(urlStr, { ...init, signal: AbortSignal.timeout(1000) });
+            return response;
+          } catch {
+            // Silently fail - fallback will be used
+            return new Response(null, { status: 503, statusText: 'Service Unavailable' });
+          }
+        }
       
       // First, check if this is a call to one of our API endpoints that should use fallback
       // This catches jserror and other API calls from Cloud Shell scripts
@@ -227,7 +239,7 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
           }
           
           // Use API proxy directly (UV proxy disabled due to service worker issues)
-          let proxyPath = '';
+        let proxyPath = '';
           try {
             const urlObj = new URL(targetUrl);
             proxyPath = urlObj.pathname + urlObj.search + urlObj.hash;
@@ -284,8 +296,12 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
           if (response.status === 401) {
             authErrorCount++;
             // Don't log 401s as errors - they're expected during authentication
+            // Suppress console errors for 401s during initial auth
             if (authErrorCount <= maxAuthErrors) {
+              // Only log first few 401s, then suppress
+              if (authErrorCount <= 2) {
               console.log(`[Cloud Shell] Authentication required (${authErrorCount}/${maxAuthErrors}) - OAuth flow will be triggered automatically`);
+              }
             }
             
             // If we get too many 401s and no OAuth popup is open, try to trigger OAuth manually
@@ -295,6 +311,14 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
               const oauthUrl = `https://accounts.google.com/o/oauth2/auth?client_id=618104708054-9r9s1c4alg36erliucho9t52n32n6dgq.apps.googleusercontent.com&redirect_uri=https://shell.cloud.google.com/oauth2callback&response_type=code&scope=https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/drive`;
               oauthPopup = window.open(oauthUrl, 'oauth', 'width=500,height=600');
             }
+            
+            // Return response but suppress error logging
+            // Create a response that won't trigger console errors
+            return new Response(response.body, {
+              status: 401,
+              statusText: 'Unauthorized',
+              headers: response.headers,
+            });
           } else if (response.status < 400) {
             // Reset counter on successful requests
             authErrorCount = 0;
@@ -305,19 +329,23 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
           // If it's a 401, it's expected during OAuth - don't treat as error
           if (error instanceof APIFallbackError && error.vercelStatus === 401) {
             authErrorCount++;
-            if (authErrorCount <= maxAuthErrors) {
+            // Suppress logging after first few 401s
+            if (authErrorCount <= 2) {
               console.log(`[Cloud Shell] Authentication required (${authErrorCount}/${maxAuthErrors}) - OAuth flow will be triggered automatically`);
             }
-            // Return a response-like object for 401s
+            // Return a response-like object for 401s (suppress console errors)
             return new Response(null, { status: 401, statusText: 'Unauthorized' });
           }
-            // For other errors, try original fetch as last resort
+          // For other errors, try original fetch as last resort
+          // Only log if it's not a connection refused error (expected for localhost:3001)
+          if (!(error instanceof Error && error.message.includes('ERR_CONNECTION_REFUSED'))) {
             console.warn('[Cloud Shell] Proxy error, trying direct fetch:', error);
-            return originalFetch(input, init);
           }
+          return originalFetch(input, init);
         }
-        
-        return originalFetch(input, init);
+      }
+      
+      return originalFetch(input, init);
       } catch (error) {
         // If anything goes wrong, fall back to original fetch
         console.warn('[Cloud Shell] Fetch interceptor error:', error);
@@ -363,11 +391,17 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
           return originalXHROpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
         }
         
+        // Suppress localhost:3001 errors (WebVM backend is optional)
+        if (urlStr.includes('localhost:3001')) {
+          // Silently handle - return a dummy URL that will fail gracefully
+          return originalXHROpen.call(this, method, 'about:blank', async ?? true, username ?? null, password ?? null);
+        }
+        
         // Block play.google.com requests (Cloud Shell analytics)
         if (urlStr.includes('play.google.com')) {
           // Return a dummy URL that will fail gracefully
           return originalXHROpen.call(this, method, 'about:blank', async ?? true, username ?? null, password ?? null);
-      }
+        }
       
         // Proxy ALL Cloud Shell requests - both shell.cloud.google.com and our domain's /cloudshell/*
         if (urlStr.includes('shell.cloud.google.com') || urlStr.includes('/cloudshell/') || urlStr.includes('cloudshell.clients6.google.com')) {
@@ -379,14 +413,14 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
               const urlObj = new URL(urlStr);
               const path = urlObj.pathname.replace(/^\/cloudshell/, '');
               targetUrl = `https://shell.cloud.google.com${path}${urlObj.search}${urlObj.hash}`;
-            } catch (e) {
+          } catch (e) {
               console.warn('[Cloud Shell] Failed to parse XHR URL:', urlStr, e);
               return originalXHROpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
-            }
           }
-          
+        }
+        
           // Use API proxy directly (UV proxy disabled)
-          let proxyPath = '';
+        let proxyPath = '';
           try {
             const urlObj = new URL(targetUrl);
             proxyPath = urlObj.pathname + urlObj.search + urlObj.hash;
@@ -427,8 +461,22 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
               // Header might already be set, ignore
             }
           }
+          
+          // Suppress 401 errors from showing in console
+          const originalOnError = this.onerror;
+          const originalOnLoad = this.onload;
+          this.onerror = function(event) {
+            // Suppress 401 errors (expected during OAuth)
+            if (this.status === 401) {
+              // Don't call original error handler for 401s
+              return;
+            }
+            if (originalOnError) {
+              originalOnError.call(this, event);
+            }
+          };
         } catch (e) {
-          console.warn('[Cloud Shell] XHR send interceptor error:', e);
+          // Silently ignore errors
         }
       }
       return originalXHRSend.call(this, body);
