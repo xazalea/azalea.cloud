@@ -107,8 +107,23 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
     // Intercept fetch requests to Cloud Shell
     const originalFetch = window.fetch;
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      const urlStr = url.toString();
+      try {
+        // Normalize URL
+        let urlStr: string;
+        if (typeof input === 'string') {
+          urlStr = input;
+        } else if (input instanceof URL) {
+          urlStr = input.href;
+        } else {
+          urlStr = input.url;
+        }
+        
+        // Handle relative URLs
+        if (urlStr.startsWith('/')) {
+          urlStr = window.location.origin + urlStr;
+        } else if (!urlStr.includes('://')) {
+          urlStr = new URL(urlStr, window.location.href).href;
+        }
       
       // First, check if this is a call to one of our API endpoints that should use fallback
       // This catches jserror and other API calls from Cloud Shell scripts
@@ -142,7 +157,8 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
       // Don't proxy OAuth requests - they need to go directly to Google
       if (urlStr.includes('accounts.google.com') || 
           urlStr.includes('oauth2.googleapis.com') ||
-          urlStr.includes('oauth2')) {
+            urlStr.includes('oauth2') ||
+            urlStr.includes('googleapis.com/auth')) {
         return originalFetch(input, init);
       }
       
@@ -151,34 +167,40 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         return originalFetch(input, init);
       }
       
-      // Proxy ALL requests to shell.cloud.google.com through UV proxy
-      // UV proxy handles cookies and authentication much better
-      if (urlStr.includes('shell.cloud.google.com') || urlStr.includes('/cloudshell/')) {
-        let targetUrl = urlStr;
-        
-        if (!urlStr.includes('shell.cloud.google.com')) {
-          // Request to our domain's /cloudshell/* - convert to full URL
-          const urlObj = new URL(urlStr);
-          const path = urlObj.pathname.replace(/^\/cloudshell/, '');
-          targetUrl = `https://shell.cloud.google.com${path}${urlObj.search}`;
+        // Don't proxy gstatic resources (they're public and don't need proxying)
+        if (urlStr.includes('gstatic.com')) {
+          return originalFetch(input, init);
         }
         
-        // Use UV proxy if available (better cookie handling)
-        if ((window as any).__uv$config && (window as any).__uv$config.encodeUrl) {
-          try {
-            // Check if Ultraviolet is available
-            if (typeof (window as any).Ultraviolet === 'undefined') {
-              throw new Error('Ultraviolet not loaded');
+        // Don't proxy fonts.googleapis.com
+        if (urlStr.includes('fonts.googleapis.com') || urlStr.includes('fonts.gstatic.com')) {
+          return originalFetch(input, init);
+        }
+        
+        // Proxy ALL requests to shell.cloud.google.com through UV proxy
+        // UV proxy handles cookies and authentication much better
+        if (urlStr.includes('shell.cloud.google.com') || urlStr.includes('/cloudshell/') || urlStr.includes('cloudshell.clients6.google.com')) {
+          let targetUrl = urlStr;
+          
+          // Convert relative /cloudshell/* paths to full URLs
+          if (urlStr.includes('/cloudshell/') && !urlStr.includes('shell.cloud.google.com')) {
+            try {
+              const urlObj = new URL(urlStr);
+              const path = urlObj.pathname.replace(/^\/cloudshell/, '');
+              targetUrl = `https://shell.cloud.google.com${path}${urlObj.search}${urlObj.hash}`;
+            } catch (e) {
+              console.warn('[Cloud Shell] Failed to parse URL:', urlStr, e);
+              return originalFetch(input, init);
             }
-            
+          }
+          
+          // Use UV proxy if available (better cookie handling)
+          if ((window as any).__uv$config && (window as any).__uv$config.encodeUrl && (window as any).Ultraviolet) {
+            try {
             const encodedUrl = (window as any).__uv$config.encodeUrl(targetUrl);
             const proxyUrl = (window as any).__uv$config.prefix + encodedUrl;
             
-            console.log('[Cloud Shell] Proxying through UV:', targetUrl.substring(0, 80) + '...', '->', proxyUrl.substring(0, 80) + '...');
-            
             // UV proxy handles everything including cookies via service worker
-            // The service worker will intercept this and proxy it through WISP/BareClient
-            // Make sure the request goes through the service worker by using the UV prefix
             const fetchInit: RequestInit = {
               ...init,
               credentials: 'include', // Important for cookies
@@ -188,7 +210,7 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
             try {
               const response = await originalFetch(proxyUrl, fetchInit);
               
-              // If UV proxy returns an error, fall back to API proxy
+                // If UV proxy returns a server error, fall back to API proxy
               if (!response.ok && response.status >= 500) {
                 console.warn('[Cloud Shell] UV proxy returned error, falling back to API proxy');
                 throw new Error('UV proxy error');
@@ -200,30 +222,64 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
               throw uvError; // Will be caught by outer catch and use API proxy
             }
           } catch (e) {
+              // UV proxy encoding failed, fall through to API proxy
             console.warn('[Cloud Shell] UV proxy encoding failed, falling back to API proxy:', e);
           }
         }
         
         // Fallback to our API proxy if UV proxy not available
         let proxyPath = '';
-        if (urlStr.includes('shell.cloud.google.com')) {
-          const urlObj = new URL(urlStr);
-          proxyPath = urlObj.pathname + urlObj.search;
-        } else {
-          const urlObj = new URL(urlStr);
-          proxyPath = urlObj.pathname.replace(/^\/cloudshell/, '') + urlObj.search;
+          try {
+            const urlObj = new URL(targetUrl);
+            proxyPath = urlObj.pathname + urlObj.search + urlObj.hash;
+          } catch (e) {
+            console.warn('[Cloud Shell] Failed to parse target URL:', targetUrl, e);
+            return originalFetch(input, init);
         }
         
         const proxyUrl = `/api/proxy/cloudshell?path=${encodeURIComponent(proxyPath.replace(/^\//, ''))}`;
         
         try {
-          const response = await apiFallback.get(proxyUrl, {
+            const method = init?.method || (typeof input === 'object' && 'method' in input ? (input as Request).method : 'GET');
+            let response: Response;
+            
+            if (method === 'GET' || method === 'HEAD') {
+              response = await apiFallback.get(proxyUrl, {
+                ...init,
+                headers: {
+                  ...init?.headers,
+                  'X-Original-URL': targetUrl,
+                },
+              });
+            } else {
+              const body = init?.body || (typeof input === 'object' && 'body' in input ? (input as Request).body : undefined);
+              if (method === 'POST') {
+                response = await apiFallback.post(proxyUrl, body, {
+                  ...init,
+                  headers: {
+                    ...init?.headers,
+                    'X-Original-URL': targetUrl,
+                  },
+                });
+              } else if (method === 'PUT') {
+                response = await apiFallback.put(proxyUrl, body, {
           ...init,
           headers: {
             ...init?.headers,
             'X-Original-URL': targetUrl,
           },
         });
+              } else {
+                response = await fetchWithFallback(proxyUrl, {
+                  ...init,
+                  method,
+                  headers: {
+                    ...init?.headers,
+                    'X-Original-URL': targetUrl,
+                  },
+                });
+              }
+            }
           
           // Track 401 errors (expected during OAuth flow)
           if (response.status === 401) {
@@ -256,11 +312,18 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
             // Return a response-like object for 401s
             return new Response(null, { status: 401, statusText: 'Unauthorized' });
           }
-          throw error;
+            // For other errors, try original fetch as last resort
+            console.warn('[Cloud Shell] Proxy error, trying direct fetch:', error);
+            return originalFetch(input, init);
+          }
         }
+        
+        return originalFetch(input, init);
+      } catch (error) {
+        // If anything goes wrong, fall back to original fetch
+        console.warn('[Cloud Shell] Fetch interceptor error:', error);
+        return originalFetch(input, init);
       }
-      
-      return originalFetch(input, init);
     };
 
     // Also intercept XMLHttpRequest (Cloud Shell uses this heavily)
@@ -268,12 +331,21 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
     const originalXHRSend = XMLHttpRequest.prototype.send;
     
     XMLHttpRequest.prototype.open = function(method: string, url: string | URL, async?: boolean, username?: string | null, password?: string | null) {
-      const urlStr = url.toString();
+      try {
+        let urlStr = url.toString();
+        
+        // Handle relative URLs
+        if (urlStr.startsWith('/')) {
+          urlStr = window.location.origin + urlStr;
+        } else if (!urlStr.includes('://')) {
+          urlStr = new URL(urlStr, window.location.href).href;
+        }
       
       // Don't proxy OAuth requests - they need to go directly to Google
       if (urlStr.includes('accounts.google.com') || 
           urlStr.includes('oauth2.googleapis.com') ||
-          urlStr.includes('oauth2')) {
+            urlStr.includes('oauth2') ||
+            urlStr.includes('googleapis.com/auth')) {
         return originalXHROpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
       }
       
@@ -282,25 +354,35 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         return originalXHROpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
       }
       
-      // Proxy ALL Cloud Shell requests - both shell.cloud.google.com and our domain's /cloudshell/*
-      if (urlStr.includes('shell.cloud.google.com') || urlStr.includes('/cloudshell/')) {
-        let targetUrl = urlStr;
-        
-        if (!urlStr.includes('shell.cloud.google.com')) {
-          // Request to our domain's /cloudshell/* - convert to full URL
-          const urlObj = new URL(urlStr);
-          const path = urlObj.pathname.replace(/^\/cloudshell/, '');
-          targetUrl = `https://shell.cloud.google.com${path}${urlObj.search}`;
+        // Don't proxy gstatic resources
+        if (urlStr.includes('gstatic.com')) {
+          return originalXHROpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
         }
         
-        // Use UV proxy if available (better cookie handling)
-        if ((window as any).__uv$config && (window as any).__uv$config.encodeUrl) {
-          try {
-            // Check if Ultraviolet is available
-            if (typeof (window as any).Ultraviolet === 'undefined') {
-              throw new Error('Ultraviolet not loaded');
+        // Don't proxy fonts.googleapis.com
+        if (urlStr.includes('fonts.googleapis.com') || urlStr.includes('fonts.gstatic.com')) {
+          return originalXHROpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
+        }
+        
+        // Proxy ALL Cloud Shell requests - both shell.cloud.google.com and our domain's /cloudshell/*
+        if (urlStr.includes('shell.cloud.google.com') || urlStr.includes('/cloudshell/') || urlStr.includes('cloudshell.clients6.google.com')) {
+          let targetUrl = urlStr;
+          
+          // Convert relative /cloudshell/* paths to full URLs
+          if (urlStr.includes('/cloudshell/') && !urlStr.includes('shell.cloud.google.com')) {
+            try {
+              const urlObj = new URL(urlStr);
+              const path = urlObj.pathname.replace(/^\/cloudshell/, '');
+              targetUrl = `https://shell.cloud.google.com${path}${urlObj.search}${urlObj.hash}`;
+            } catch (e) {
+              console.warn('[Cloud Shell] Failed to parse XHR URL:', urlStr, e);
+              return originalXHROpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
             }
-            
+          }
+          
+          // Use UV proxy if available (better cookie handling)
+          if ((window as any).__uv$config && (window as any).__uv$config.encodeUrl && (window as any).Ultraviolet) {
+            try {
             const encodedUrl = (window as any).__uv$config.encodeUrl(targetUrl);
             const proxyUrl = (window as any).__uv$config.prefix + encodedUrl;
             
@@ -318,12 +400,12 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         
         // Fallback to our API proxy
         let proxyPath = '';
-        if (urlStr.includes('shell.cloud.google.com')) {
-          const urlObj = new URL(urlStr);
-          proxyPath = urlObj.pathname + urlObj.search;
-        } else {
-          const urlObj = new URL(urlStr);
-          proxyPath = urlObj.pathname.replace(/^\/cloudshell/, '') + urlObj.search;
+          try {
+            const urlObj = new URL(targetUrl);
+            proxyPath = urlObj.pathname + urlObj.search + urlObj.hash;
+          } catch (e) {
+            console.warn('[Cloud Shell] Failed to parse XHR target URL:', targetUrl, e);
+            return originalXHROpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
         }
         
         const proxyUrl = `/api/proxy/cloudshell?path=${encodeURIComponent(proxyPath.replace(/^\//, ''))}`;
@@ -336,10 +418,15 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
       }
       
       return originalXHROpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
+      } catch (error) {
+        console.warn('[Cloud Shell] XHR open interceptor error:', error);
+        return originalXHROpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
+      }
     };
     
     XMLHttpRequest.prototype.send = function(body?: Document | XMLHttpRequestBodyInit | null) {
       if ((this as any)._proxied) {
+        try {
         // Set withCredentials for UV proxy requests (important for cookies)
         if ((this as any)._useUVProxy && (this as any)._withCredentials) {
           this.withCredentials = true;
@@ -347,11 +434,61 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         
         // Add X-Original-URL header for API proxy requests (not needed for UV proxy)
         if (!(this as any)._useUVProxy) {
+            try {
           this.setRequestHeader('X-Original-URL', (this as any)._originalUrl);
+            } catch (e) {
+              // Header might already be set, ignore
+            }
+          }
+        } catch (e) {
+          console.warn('[Cloud Shell] XHR send interceptor error:', e);
         }
       }
       return originalXHRSend.call(this, body);
     };
+    
+    // Intercept WebSocket connections (Cloud Shell may use WebSockets)
+    const originalWebSocket = (window as any).WebSocket;
+    if (originalWebSocket) {
+      (window as any).WebSocket = function(url: string | URL, protocols?: string | string[]) {
+        const urlStr = typeof url === 'string' ? url : url.toString();
+        
+        // Don't proxy OAuth WebSockets
+        if (urlStr.includes('accounts.google.com') || 
+            urlStr.includes('oauth2.googleapis.com')) {
+          return new originalWebSocket(url, protocols);
+        }
+        
+        // Proxy Cloud Shell WebSocket connections
+        if (urlStr.includes('shell.cloud.google.com') || urlStr.includes('cloudshell.clients6.google.com')) {
+          // For WebSockets, we need to use a different approach
+          // Try to use UV proxy if available
+          if ((window as any).__uv$config && (window as any).__uv$config.encodeUrl && (window as any).Ultraviolet) {
+            try {
+              const encodedUrl = (window as any).__uv$config.encodeUrl(urlStr);
+              const proxyUrl = (window as any).__uv$config.prefix + encodedUrl;
+              // Convert to WebSocket URL
+              const wsUrl = proxyUrl.replace(/^https?:\/\//, 'wss://').replace(/^http:\/\//, 'ws://');
+              console.log('[Cloud Shell] Proxying WebSocket through UV:', urlStr, '->', wsUrl);
+              return new originalWebSocket(wsUrl, protocols);
+            } catch (e) {
+              console.warn('[Cloud Shell] UV proxy encoding failed for WebSocket, using direct connection:', e);
+            }
+          }
+          
+          // For now, allow direct WebSocket connections (they may work if CORS allows)
+          // In the future, we could implement a WebSocket proxy
+          console.log('[Cloud Shell] WebSocket connection (may not work due to CORS):', urlStr);
+          return new originalWebSocket(url, protocols);
+        }
+        
+        return new originalWebSocket(url, protocols);
+      };
+      
+      // Copy static properties
+      Object.setPrototypeOf((window as any).WebSocket, originalWebSocket);
+      Object.setPrototypeOf((window as any).WebSocket.prototype, originalWebSocket.prototype);
+    }
   };
 
   /**
@@ -427,7 +564,7 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
       // Note: shell.cloud.google.com sets X-Frame-Options: deny, so we can't use iframe
       // Instead, we load Cloud Shell scripts directly and handle OAuth via popup/redirect
 
-      // Set up ppConfig (required by Cloud Shell)
+      // Set up ppConfig (required by Cloud Shell) - MUST be set before any scripts load
       (window as any).ppConfig = {
         productName: 'a8a32321959c812aaca06d2067277be7',
         deleteIsEnforced: false,
@@ -435,6 +572,17 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         heartbeatRate: 0.5,
         periodicReportingRateMillis: 60000.0,
         disableAllReporting: false
+      };
+
+      // Set CSH_SERVER_VARS (Cloud Shell server variables) - MUST be set before scripts load
+      // Use the EXACT same encoded string from shell.html
+      (window as any).CSH_SERVER_VARS = "\x5b\x5b\x22mynameisrohanandthisismyemail@gmail.com\x22,\x220\x22,\x22Rohan\x22,\x22Salem\x22\x5d,\x5b\x22https:\/\/shell.cloud.google.com\x22,\x22https:\/\/cloudshell.clients6.google.com\x22,\x22cloud-sshrelay-server_20251105.01_RC00\x22,null,\x22618104708054-9r9s1c4alg36erliucho9t52n32n6dgq.apps.googleusercontent.com\x22,\x22AIzaSyBj8JySZNOCTBCnK2w-CHlwJnpwcQkQ7Hk\x22,\x22https:\/\/cloudresourcemanager.clients6.google.com\x22,\x5bnull,null,null,\x22https:\/\/www.gstatic.com\/devops\/connect\/loader\/tool_library.js\x22\x5d,\x22https:\/\/www.googleapis.com\/auth\/userinfo.email https:\/\/www.googleapis.com\/auth\/userinfo.profile https:\/\/www.googleapis.com\/auth\/cloud-platform https:\/\/www.googleapis.com\/auth\/drive\x22,60,\x22https:\/\/workstations.googleapis.com\x22\x5d,\x5bnull,null,null,null,null,null,\x5b\x5bnull,102163142\x5d,\x5bnull,102162558\x5d,\x5bnull,115965161\x5d,\x5bnull,70980719\x5d,\x5bnull,71639050\x5d,\x5bnull,44537330\x5d,\x5bnull,44536920\x5d,\x5bnull,18800188\x5d,\x5bnull,103035570\x5d,\x5bnull,105075601\x5d,\x5bnull,44490095\x5d\x5d,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,1,null,null,1,null,null,null,null,1,null,null,null,null,1,null,1,null,null,1,null,null,1,1,1,null,1,1,1,null,null,1,null,null,null,null,1\x5d,null,\x5b\x5b\x22xtemp.xemail@gmail.com\x22,\x221\x22,\x22Temp\x22\x5d,\x5b\x22incogito.acc@gmail.com\x22,\x222\x22,\x22Incog\x22\x5d,\x5b\x22rndm.grpe@gmail.com\x22,\x223\x22,\x22Rohan\x22\x5d,\x5b\x22rohansalemisapro@gmail.com\x22,\x224\x22,\x22rohan\x22,\x22salem\x22\x5d,\x5b\x22rohansalem8@gmail.com\x22,\x225\x22,\x22Rohan\x22,\x22Salem\x22\x5d,\x5b\x22rndm.ptato@gmail.com\x22,\x226\x22,\x22Potato\x22\x5d\x5d,\x5b\x5b\x22gcr.io\/cloudshell-images\/cloudshell:latest\x22,\x22gcr.io\/cloudrun\/button:latest\x22,\x22gcr.io\/ds-artifacts-cloudshell\/deploystack_custom_image\x22\x5d,\x5b\x22github.com\/google\/\x22,\x22github.com\/googlestaging\/\x22,\x22github.com\/googleapis\/\x22,\x22github.com\/googlecloudplatform\/\x22,\x22github.com\/googlemaps\/\x22,\x22github.com\/googleworkspace\/\x22,\x22github.com\/terraform-google-modules\/\x22,\x22go.googlesource.com\/\x22\x5d,\x5b\x22github.com\/GoogleContainerTools\/skaffold\x22\x5d\x5d,\x5b\x5d,\x5b\x5b\x22github.com\/OnlineHacKing\/\x22,\x22github.com\/Bhaviktutorials\/\x22,\x22github.com\/sherlock-project\/\x22,\x22github.com\/htr-tech\/zphisher\/\x22,\x22github.com\/soxoj\/maigret\/\x22,\x22github.com\/fikrado\/\x22\x5d,\x5b\x22github.com\/JoelGMSec\/Cloudtopolis\x22\x5d\x5d\x5d";
+      (window as any).CSH_LOAD_T0 = Date.now();
+
+      // Define _DumpException function (required by Cloud Shell)
+      (window as any)._DumpException = function(e: any) {
+        console.error('[Cloud Shell] Error:', e);
+        // Don't throw - Cloud Shell handles errors internally
       };
 
       // Create the Cloud Shell root element
@@ -445,147 +593,204 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
       // Add body class for Cloud Shell styling
       document.body.classList.add('csh-app-body', 'mat-app-background');
 
-      // Load Cloud Shell CSS
-      const cssLink = document.createElement('link');
-      cssLink.rel = 'stylesheet';
-      cssLink.href = 'https://www.gstatic.com/_/cloudshell-scs/_/ss/k=cloudshell-scs.csh.REhykk9w-JI.L.W.O/am=AAAD/d=0/rs=AKpenNb-zyE8LdUST7d_ssVbEfzNbhCdZQ/m=cloudshell';
-      document.head.appendChild(cssLink);
+      // Set base href (required by Cloud Shell) - MUST be set before scripts load
+      const baseElement = document.querySelector('base');
+      if (!baseElement) {
+        const base = document.createElement('base');
+        base.href = '/';
+        document.head.insertBefore(base, document.head.firstChild);
+      }
 
-      // Load Material Icons
-      const materialIconsLink = document.createElement('link');
-      materialIconsLink.rel = 'stylesheet';
-      materialIconsLink.href = 'https://fonts.googleapis.com/icon?family=Material+Icons';
-      document.head.appendChild(materialIconsLink);
-
-      // Load Google Material Icons
-      const googleMaterialIconsLink = document.createElement('link');
-      googleMaterialIconsLink.rel = 'stylesheet';
-      googleMaterialIconsLink.href = 'https://fonts.googleapis.com/css?family=Google+Material+Icons';
-      document.head.appendChild(googleMaterialIconsLink);
-
-      // Set CSH_SERVER_VARS (Cloud Shell server variables)
-      // Use the EXACT same encoded string from shell.html
-      (window as any).CSH_SERVER_VARS = "\x5b\x5b\x22mynameisrohanandthisismyemail@gmail.com\x22,\x220\x22,\x22Rohan\x22,\x22Salem\x22\x5d,\x5b\x22https:\/\/shell.cloud.google.com\x22,\x22https:\/\/cloudshell.clients6.google.com\x22,\x22cloud-sshrelay-server_20251105.01_RC00\x22,null,\x22618104708054-9r9s1c4alg36erliucho9t52n32n6dgq.apps.googleusercontent.com\x22,\x22AIzaSyBj8JySZNOCTBCnK2w-CHlwJnpwcQkQ7Hk\x22,\x22https:\/\/cloudresourcemanager.clients6.google.com\x22,\x5bnull,null,null,\x22https:\/\/www.gstatic.com\/devops\/connect\/loader\/tool_library.js\x22\x5d,\x22https:\/\/www.googleapis.com\/auth\/userinfo.email https:\/\/www.googleapis.com\/auth\/userinfo.profile https:\/\/www.googleapis.com\/auth\/cloud-platform https:\/\/www.googleapis.com\/auth\/drive\x22,60,\x22https:\/\/workstations.googleapis.com\x22\x5d,\x5bnull,null,null,null,null,null,\x5b\x5bnull,102163142\x5d,\x5bnull,102162558\x5d,\x5bnull,115965161\x5d,\x5bnull,70980719\x5d,\x5bnull,71639050\x5d,\x5bnull,44537330\x5d,\x5bnull,44536920\x5d,\x5bnull,18800188\x5d,\x5bnull,103035570\x5d,\x5bnull,105075601\x5d,\x5bnull,44490095\x5d\x5d,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,1,null,null,1,null,null,null,null,1,null,null,null,null,1,null,1,null,null,1,null,null,1,1,1,null,1,1,1,null,null,1,null,null,null,null,1\x5d,null,\x5b\x5b\x22xtemp.xemail@gmail.com\x22,\x221\x22,\x22Temp\x22\x5d,\x5b\x22incogito.acc@gmail.com\x22,\x222\x22,\x22Incog\x22\x5d,\x5b\x22rndm.grpe@gmail.com\x22,\x223\x22,\x22Rohan\x22\x5d,\x5b\x22rohansalemisapro@gmail.com\x22,\x224\x22,\x22rohan\x22,\x22salem\x22\x5d,\x5b\x22rohansalem8@gmail.com\x22,\x225\x22,\x22Rohan\x22,\x22Salem\x22\x5d,\x5b\x22rndm.ptato@gmail.com\x22,\x226\x22,\x22Potato\x22\x5d\x5d,\x5b\x5b\x22gcr.io\/cloudshell-images\/cloudshell:latest\x22,\x22gcr.io\/cloudrun\/button:latest\x22,\x22gcr.io\/ds-artifacts-cloudshell\/deploystack_custom_image\x22\x5d,\x5b\x22github.com\/google\/\x22,\x22github.com\/googlestaging\/\x22,\x22github.com\/googleapis\/\x22,\x22github.com\/googlecloudplatform\/\x22,\x22github.com\/googlemaps\/\x22,\x22github.com\/googleworkspace\/\x22,\x22github.com\/terraform-google-modules\/\x22,\x22go.googlesource.com\/\x22\x5d,\x5b\x22github.com\/GoogleContainerTools\/skaffold\x22\x5d\x5d,\x5b\x5d,\x5b\x5b\x22github.com\/OnlineHacKing\/\x22,\x22github.com\/Bhaviktutorials\/\x22,\x22github.com\/sherlock-project\/\x22,\x22github.com\/htr-tech\/zphisher\/\x22,\x22github.com\/soxoj\/maigret\/\x22,\x22github.com\/fikrado\/\x22\x5d,\x5b\x22github.com\/JoelGMSec\/Cloudtopolis\x22\x5d\x5d\x5d";
-      (window as any).CSH_LOAD_T0 = Date.now();
-
-      // Define _DumpException function (required by Cloud Shell)
-      (window as any)._DumpException = function(e: any) {
-        console.error('Cloud Shell error:', e);
+      // Load CSS first (required for proper rendering)
+      const loadCSS = (href: string): Promise<void> => {
+        return new Promise((resolve, reject) => {
+          const link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = href;
+          link.onload = () => resolve();
+          link.onerror = () => {
+            console.warn(`[Cloud Shell] Failed to load CSS: ${href}`);
+            resolve(); // Continue even if CSS fails
+          };
+          document.head.appendChild(link);
+        });
       };
 
       // Load UV proxy scripts for better cookie handling
       // UV proxy uses WISP (WebSocket-based proxy) which handles cookies much better
-      const loadUVProxy = async () => {
-        return new Promise<void>((resolve) => {
-          // Load UV bundle first (synchronously to ensure it's available)
+      const loadUVProxy = async (): Promise<boolean> => {
+        return new Promise<boolean>((resolve) => {
+          try {
+            // Check if UV is already loaded
+            if ((window as any).__uv$config && (window as any).Ultraviolet) {
+              console.log('[Cloud Shell] UV proxy already loaded');
+              resolve(true);
+              return;
+            }
+
+            // Load UV bundle first
           const uvBundle = document.createElement('script');
           uvBundle.src = '/uv-proxy/uv/uv.bundle.js';
           uvBundle.async = false;
-          
-          // Load UV config
-          const uvConfig = document.createElement('script');
-          uvConfig.src = '/uv-proxy/uv/uv.config.js';
-          uvConfig.async = false;
-          
-          uvConfig.onload = async () => {
-            // Wait a bit for UV to initialize
-            await new Promise(resolve => setTimeout(resolve, 200));
+            uvBundle.crossOrigin = 'anonymous';
             
+            let bundleLoaded = false;
+            let configLoaded = false;
+            
+            const checkReady = () => {
+              if (bundleLoaded && configLoaded) {
+                // Wait for UV to initialize
+                setTimeout(async () => {
+                  try {
+                    if ((window as any).__uv$config && (window as any).Ultraviolet) {
             // Register service worker for UV proxy
+                      if ('serviceWorker' in navigator) {
             try {
-              if ('serviceWorker' in navigator && (window as any).__uv$config) {
                 const swUrl = (window as any).__uv$config.sw || '/uv-proxy/uv/sw.js';
                 const registration = await navigator.serviceWorker.register(swUrl, {
                   scope: '/uv-proxy/uv/'
                 });
                 console.log('[Cloud Shell] UV proxy service worker registered:', registration.scope);
                 
-                // Wait for service worker to be ready
-                if (registration.installing) {
-                  registration.installing.addEventListener('statechange', (e) => {
-                    const sw = e.target as ServiceWorker;
-                    console.log('[Cloud Shell] Service worker state:', sw.state);
-                  });
-                } else if (registration.waiting) {
-                  console.log('[Cloud Shell] Service worker waiting');
-                } else if (registration.active) {
-                  console.log('[Cloud Shell] Service worker active');
-                }
-              }
+                          // Wait for service worker to be ready (up to 5 seconds)
+                          let waitCount = 0;
+                          const waitForSW = setInterval(() => {
+                            waitCount++;
+                            if (registration.active || waitCount > 10) {
+                              clearInterval(waitForSW);
+                              if (registration.active) {
+                                console.log('[Cloud Shell] Service worker active and ready');
+                              }
+                              resolve(true);
+                            }
+                          }, 500);
             } catch (swError) {
               console.warn('[Cloud Shell] Service worker registration failed:', swError);
-            }
+                          resolve(false); // Continue without service worker
+                        }
+                      } else {
+                        console.warn('[Cloud Shell] Service workers not supported');
+                        resolve(false);
+                      }
+                    } else {
+                      console.warn('[Cloud Shell] UV not properly initialized');
+                      resolve(false);
+                    }
+                  } catch (error) {
+                    console.warn('[Cloud Shell] UV initialization error:', error);
+                    resolve(false);
+                  }
+                }, 300);
+              }
+            };
             
-            // Set up WISP connection (needed for UV proxy to work)
-            try {
-              // Import WISP connection setup
-              const wispUrl = 'wss://wisp.rhw.one/';
-              // The WISP connection will be set up by UV's handler when requests are made
-              console.log('[Cloud Shell] UV proxy ready (WISP will connect on first request)');
-            } catch (wispError) {
-              console.warn('[Cloud Shell] WISP setup warning:', wispError);
-            }
-            
-            console.log('[Cloud Shell] UV proxy loaded and ready');
-            resolve();
+            uvBundle.onload = () => {
+              bundleLoaded = true;
+              checkReady();
           };
           
           uvBundle.onerror = () => {
-            console.warn('[Cloud Shell] UV proxy bundle failed to load, will use API proxy fallback');
-            resolve(); // Continue even if UV fails
+              console.warn('[Cloud Shell] UV proxy bundle failed to load');
+              resolve(false);
+            };
+            
+            // Load UV config
+            const uvConfig = document.createElement('script');
+            uvConfig.src = '/uv-proxy/uv/uv.config.js';
+            uvConfig.async = false;
+            uvConfig.crossOrigin = 'anonymous';
+            
+            uvConfig.onload = () => {
+              configLoaded = true;
+              checkReady();
           };
           
           uvConfig.onerror = () => {
-            console.warn('[Cloud Shell] UV proxy config failed to load, will use API proxy fallback');
-            resolve(); // Continue even if UV fails
+              console.warn('[Cloud Shell] UV proxy config failed to load');
+              resolve(false);
           };
           
           document.head.appendChild(uvBundle);
           document.head.appendChild(uvConfig);
+          } catch (error) {
+            console.warn('[Cloud Shell] UV proxy setup error:', error);
+            resolve(false);
+          }
         });
       };
       
-      // Load UV proxy first, then set up Cloud Shell proxy, then load Cloud Shell scripts
-      loadUVProxy().then(() => {
-        // Intercept fetch/XMLHttpRequest to proxy Cloud Shell API calls
-        // MUST be set up BEFORE Cloud Shell scripts load
-        setupCloudShellProxy();
-        
-        // Now load Cloud Shell script
-        loadCloudShellMainScript();
-      });
-      
-      // Extract Cloud Shell script loading to separate function
-      const loadCloudShellMainScript = () => {
+      // Main loading sequence
+      const initializeCloudShell = async () => {
+        try {
+          // Step 1: Load CSS files in parallel
+          console.log('[Cloud Shell] Loading CSS files...');
+          await Promise.all([
+            loadCSS('https://www.gstatic.com/_/cloudshell-scs/_/ss/k=cloudshell-scs.csh.REhykk9w-JI.L.W.O/am=AAAD/d=0/rs=AKpenNb-zyE8LdUST7d_ssVbEfzNbhCdZQ/m=cloudshell'),
+            loadCSS('https://fonts.googleapis.com/icon?family=Material+Icons'),
+            loadCSS('https://fonts.googleapis.com/css?family=Google+Material+Icons')
+          ]);
+          console.log('[Cloud Shell] CSS files loaded');
 
-        // Set base href (required by Cloud Shell)
-        const baseElement = document.querySelector('base');
-        if (!baseElement) {
-          const base = document.createElement('base');
-          base.href = '/';
-          document.head.insertBefore(base, document.head.firstChild);
-        }
+          // Step 2: Load UV proxy (optional, but recommended)
+          console.log('[Cloud Shell] Loading UV proxy...');
+          const uvReady = await loadUVProxy();
+          if (uvReady) {
+            console.log('[Cloud Shell] UV proxy ready');
+          } else {
+            console.log('[Cloud Shell] UV proxy not available, will use API proxy fallback');
+          }
 
-        // Load the main Cloud Shell script from gstatic
+          // Step 3: Set up proxy interceptors (MUST be before Cloud Shell scripts load)
+          console.log('[Cloud Shell] Setting up proxy interceptors...');
+          setupCloudShellProxy();
+          console.log('[Cloud Shell] Proxy interceptors ready');
+
+          // Step 4: Load main Cloud Shell script
+          console.log('[Cloud Shell] Loading main Cloud Shell script...');
         const script = document.createElement('script');
         script.src = 'https://www.gstatic.com/_/cloudshell-scs/_/js/k=cloudshell-scs.csh.en.AYpRfyRWRGQ.es5.O/am=AAAD/d=1/rs=AKpenNb23Sc0ShEzLJnDAJFR8jOOG-NU6A/m=cloudshell';
         script.async = false; // Load synchronously to ensure proper initialization order
+          script.crossOrigin = 'anonymous';
+          
         script.onload = () => {
           (window as any).CSH_LOAD_T1 = Date.now();
-          console.log('Azalea Cloud Shell loaded (using real Google Cloud Shell scripts)');
-          console.log('API requests will be proxied through UV proxy (with API proxy fallback)');
-          
-          // Give Cloud Shell a moment to initialize
+            const loadTime = ((window as any).CSH_LOAD_T1 - (window as any).CSH_LOAD_T0) / 1000;
+            console.log(`[Cloud Shell] Main script loaded in ${loadTime.toFixed(2)}s`);
+            console.log('[Cloud Shell] Azalea Cloud Shell initialized');
+            console.log('[Cloud Shell] API requests will be proxied through', uvReady ? 'UV proxy' : 'API proxy');
+            
+            // Give Cloud Shell a moment to initialize and render
           setTimeout(() => {
+              // Check if Cloud Shell has initialized
+              const rootElement = document.querySelector('cloud-shell-root');
+              if (rootElement && rootElement.children.length > 0) {
+                console.log('[Cloud Shell] Cloud Shell UI rendered successfully');
+              } else {
+                console.warn('[Cloud Shell] Cloud Shell UI not yet rendered, but script loaded');
+              }
             resolve();
-          }, 500);
+            }, 1000);
         };
+          
         script.onerror = (error) => {
-          console.error('Failed to load Cloud Shell scripts:', error);
-          reject(new Error('Failed to load Cloud Shell scripts'));
-        };
+            console.error('[Cloud Shell] Failed to load main script:', error);
+            const errorMsg = 'Failed to load Cloud Shell scripts. This may be due to:\n' +
+              '1. Network connectivity issues\n' +
+              '2. CORS restrictions\n' +
+              '3. Outdated script URL\n' +
+              '4. Content Security Policy blocking the script';
+            reject(new Error(errorMsg));
+          };
+          
         document.head.appendChild(script);
+        } catch (error) {
+          console.error('[Cloud Shell] Initialization error:', error);
+          reject(error instanceof Error ? error : new Error('Unknown initialization error'));
+        }
       };
+
+      // Start initialization
+      initializeCloudShell();
     });
   };
 
