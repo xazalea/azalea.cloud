@@ -95,8 +95,22 @@ export const Terminal: React.FC<TerminalProps> = ({
         // Step 1: Check backend connection
         xterm.write('\x1b[33m[1/3]\x1b[0m Checking backend connection... ');
         try {
-          const healthResponse = await fetch('http://localhost:3001/api/health');
-          if (healthResponse.ok) {
+          // Try WebVM backend first
+          let healthResponse: Response | null = null;
+          try {
+            healthResponse = await fetch('http://localhost:3001/api/health', {
+              signal: AbortSignal.timeout(2000),
+            });
+          } catch {
+            // WebVM backend not available, try browser backend
+          }
+          
+          if (!healthResponse || !healthResponse.ok) {
+            // Fallback to browser backend (always available)
+            healthResponse = await fetch('/api/backend/health');
+          }
+          
+          if (healthResponse && healthResponse.ok) {
             xterm.writeln('\x1b[32m✓ Connected\x1b[0m');
           } else {
             xterm.writeln('\x1b[33m⚠ Backend not available (using fallback mode)\x1b[0m');

@@ -57,7 +57,20 @@ export class CloudShellService {
       } else {
         // Try to initialize backend connection
         try {
-          const response = await fetch('http://localhost:3001/api/health');
+          // Try WebVM backend first, then browser backend
+          let response: Response | null = null;
+          try {
+            response = await fetch('http://localhost:3001/api/health', {
+              signal: AbortSignal.timeout(2000),
+            });
+          } catch {
+            // WebVM backend not available
+          }
+          
+          if (!response || !response.ok) {
+            // Fallback to browser backend (always available)
+            response = await fetch('/api/backend/health');
+          }
           if (response.ok) {
             console.log('✓ Backend connection established');
           }

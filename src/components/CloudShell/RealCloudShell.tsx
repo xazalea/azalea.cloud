@@ -167,8 +167,16 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         return originalFetch(input, init);
       }
       
-        // Don't proxy gstatic resources (they're public and don't need proxying)
-        if (urlStr.includes('gstatic.com')) {
+        // Don't proxy gstatic resources directly - they should go through our proxy endpoint
+        // But allow if it's already going through our proxy
+        if (urlStr.includes('gstatic.com') && !urlStr.includes('/api/proxy/gstatic')) {
+          // For scripts, we need to proxy them, but for other resources, direct is fine
+          if (urlStr.includes('/_/cloudshell-scs/_/js/')) {
+            // This is a Cloud Shell script - should already be handled, but if not, proxy it
+            const scriptPath = urlStr.replace('https://www.gstatic.com', '');
+            const proxyUrl = `/api/proxy/gstatic?path=${encodeURIComponent(scriptPath)}`;
+            return originalFetch(proxyUrl, init);
+          }
           return originalFetch(input, init);
         }
         
@@ -745,44 +753,57 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
           setupCloudShellProxy();
           console.log('[Cloud Shell] Proxy interceptors ready');
 
-          // Step 4: Load main Cloud Shell script
+          // Step 4: Load main Cloud Shell script (proxied to avoid CORS)
           console.log('[Cloud Shell] Loading main Cloud Shell script...');
-        const script = document.createElement('script');
-        script.src = 'https://www.gstatic.com/_/cloudshell-scs/_/js/k=cloudshell-scs.csh.en.AYpRfyRWRGQ.es5.O/am=AAAD/d=1/rs=AKpenNb23Sc0ShEzLJnDAJFR8jOOG-NU6A/m=cloudshell';
-        script.async = false; // Load synchronously to ensure proper initialization order
-          script.crossOrigin = 'anonymous';
+          const scriptUrl = 'https://www.gstatic.com/_/cloudshell-scs/_/js/k=cloudshell-scs.csh.en.AYpRfyRWRGQ.es5.O/am=AAAD/d=1/rs=AKpenNb23Sc0ShEzLJnDAJFR8jOOG-NU6A/m=cloudshell';
+          // Proxy through our API to avoid CORS
+          const scriptPath = scriptUrl.replace('https://www.gstatic.com', '');
+          const proxiedScriptUrl = `/api/proxy/gstatic?path=${encodeURIComponent(scriptPath)}`;
           
-        script.onload = () => {
-          (window as any).CSH_LOAD_T1 = Date.now();
-            const loadTime = ((window as any).CSH_LOAD_T1 - (window as any).CSH_LOAD_T0) / 1000;
-            console.log(`[Cloud Shell] Main script loaded in ${loadTime.toFixed(2)}s`);
-            console.log('[Cloud Shell] Azalea Cloud Shell initialized');
-            console.log('[Cloud Shell] API requests will be proxied through', uvReady ? 'UV proxy' : 'API proxy');
+          // Load script via fetch and inject it to avoid CORS issues
+          try {
+            const scriptResponse = await fetch(proxiedScriptUrl);
+            if (!scriptResponse.ok) {
+              throw new Error(`Failed to fetch script: ${scriptResponse.status} ${scriptResponse.statusText}`);
+            }
             
-            // Give Cloud Shell a moment to initialize and render
-          setTimeout(() => {
-              // Check if Cloud Shell has initialized
-              const rootElement = document.querySelector('cloud-shell-root');
-              if (rootElement && rootElement.children.length > 0) {
-                console.log('[Cloud Shell] Cloud Shell UI rendered successfully');
-              } else {
-                console.warn('[Cloud Shell] Cloud Shell UI not yet rendered, but script loaded');
-              }
-            resolve();
-            }, 1000);
-        };
-          
-        script.onerror = (error) => {
-            console.error('[Cloud Shell] Failed to load main script:', error);
-            const errorMsg = 'Failed to load Cloud Shell scripts. This may be due to:\n' +
-              '1. Network connectivity issues\n' +
-              '2. CORS restrictions\n' +
-              '3. Outdated script URL\n' +
-              '4. Content Security Policy blocking the script';
-            reject(new Error(errorMsg));
-          };
-          
-        document.head.appendChild(script);
+            const scriptContent = await scriptResponse.text();
+            
+            // Create and inject script
+            const script = document.createElement('script');
+            script.textContent = scriptContent;
+            script.async = false;
+            
+            script.onload = () => {
+              (window as any).CSH_LOAD_T1 = Date.now();
+              const loadTime = ((window as any).CSH_LOAD_T1 - (window as any).CSH_LOAD_T0) / 1000;
+              console.log(`[Cloud Shell] Main script loaded in ${loadTime.toFixed(2)}s`);
+              console.log('[Cloud Shell] Azalea Cloud Shell initialized');
+              console.log('[Cloud Shell] API requests will be proxied through', uvReady ? 'UV proxy' : 'API proxy');
+              
+              // Give Cloud Shell a moment to initialize and render
+              setTimeout(() => {
+                // Check if Cloud Shell has initialized
+                const rootElement = document.querySelector('cloud-shell-root');
+                if (rootElement && rootElement.children.length > 0) {
+                  console.log('[Cloud Shell] Cloud Shell UI rendered successfully');
+                } else {
+                  console.warn('[Cloud Shell] Cloud Shell UI not yet rendered, but script loaded');
+                }
+                resolve();
+              }, 1000);
+            };
+            
+            script.onerror = (error) => {
+              console.error('[Cloud Shell] Failed to execute main script:', error);
+              reject(new Error('Failed to execute Cloud Shell script'));
+            };
+            
+            document.head.appendChild(script);
+          } catch (fetchError) {
+            console.error('[Cloud Shell] Failed to fetch main script:', fetchError);
+            reject(new Error(`Failed to load Cloud Shell script: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`));
+          }
         } catch (error) {
           console.error('[Cloud Shell] Initialization error:', error);
           reject(error instanceof Error ? error : new Error('Unknown initialization error'));

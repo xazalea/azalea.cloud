@@ -7,6 +7,7 @@
 import { webvmManager } from './webvmManager';
 
 const WEBVM_BACKEND_URL = 'http://localhost:3001';
+const BROWSER_BACKEND_URL = '/api/backend'; // Browser-based backend (always available)
 
 /**
  * Error class for API fallback errors
@@ -49,12 +50,29 @@ export class APIFallbackError extends Error {
 
 /**
  * Check if WebVM backend is available (with retry)
+ * Falls back to browser backend if WebVM is not available
  */
 async function isWebVMBackendAvailable(): Promise<boolean> {
   try {
-    // Use WebVM manager to ensure availability
-    const available = await webvmManager.ensureAvailable(1); // Quick check, no retries
-    return available;
+    // First try WebVM backend (localhost:3001)
+    const response = await fetch(`${WEBVM_BACKEND_URL}/api/health`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(2000),
+    });
+    if (response.ok) {
+      return true;
+    }
+  } catch {
+    // WebVM backend not available
+  }
+  
+  // Fallback to browser backend (always available)
+  try {
+    const response = await fetch(`${BROWSER_BACKEND_URL}/health`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(2000),
+    });
+    return response.ok;
   } catch {
     return false;
   }
@@ -146,19 +164,25 @@ export async function fetchWithFallback(
 }
 
 /**
- * Map Vercel API paths to WebVM backend paths
+ * Map Vercel API paths to backend paths
+ * Returns WebVM backend URL if available, otherwise browser backend URL
  */
 function mapVercelPathToWebVM(vercelUrl: string): string | null {
   try {
     const url = new URL(vercelUrl, window.location.origin);
     const path = url.pathname;
     
-    // Map Vercel API endpoints to WebVM backend endpoints
+    // Map Vercel API endpoints to backend endpoints
+    // Default to browser backend (always available)
+    // WebVM backend will be tried in fetchWithFallback if available
+    
     if (path === '/api/environment') {
+      // Prefer WebVM, but fallback to browser backend
       return `${WEBVM_BACKEND_URL}/api/environment`;
     }
     
     if (path === '/api/auth/token') {
+      // Prefer WebVM, but fallback to browser backend
       return `${WEBVM_BACKEND_URL}/api/auth/token`;
     }
     
@@ -166,11 +190,13 @@ function mapVercelPathToWebVM(vercelUrl: string): string | null {
       // Extract the original path and query
       const originalPath = path.replace('/api/proxy/cloudshell', '');
       const query = url.search;
+      // Prefer WebVM, but fallback to browser backend
       return `${WEBVM_BACKEND_URL}/api/proxy/cloudshell${originalPath}${query}`;
     }
     
     if (path === '/clienterror/jserror') {
       const query = url.search;
+      // Prefer WebVM, but fallback to browser backend
       return `${WEBVM_BACKEND_URL}/clienterror/jserror${query}`;
     }
     

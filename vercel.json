@@ -39,6 +39,18 @@
       "destination": "/api/clienterror/:path*"
     },
     {
+      "source": "/api/proxy/gstatic",
+      "destination": "/api/proxy/gstatic"
+    },
+    {
+      "source": "/api/backend/health",
+      "destination": "/api/backend/health"
+    },
+    {
+      "source": "/api/backend/desktop/start",
+      "destination": "/api/backend/desktop/start"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

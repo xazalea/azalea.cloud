@@ -76,11 +76,11 @@ export async function fetchMetadataToken(): Promise<AccessToken> {
     }
   } catch (error) {
     if (error instanceof APIFallbackError) {
-      console.error('[Metadata Auth] ❌', error.getUserMessage());
-      // Re-throw with more context
-      throw new Error(`Failed to fetch metadata token: ${error.message}`);
+      // Don't log errors - metadata server is only available in GCP environments
+      // This is expected when running locally or on Vercel
+      throw new Error(`No token available from API`);
     }
-    console.error('Failed to fetch metadata token:', error);
+    // Don't log - this is expected when not in a cloud environment
     throw error;
   }
 }
@@ -126,7 +126,8 @@ export class TokenRefreshManager {
         this.currentToken = newToken;
         this.onTokenUpdate?.(newToken);
       } catch (error) {
-        console.error('Background token refresh failed:', error);
+        // Don't log - metadata server is only available in GCP environments
+        // This is expected when running locally or on Vercel
       }
     }, refreshIntervalMs);
 
