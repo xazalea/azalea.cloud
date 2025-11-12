@@ -7,7 +7,6 @@
     "dev": "vite",
     "build": "vite build",
     "build:webvm": "bash scripts/build-webvm.sh",
-    "build:all": "npm run build:webvm && npm run build",
     "setup:webvm": "cd webvm && npm install",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
