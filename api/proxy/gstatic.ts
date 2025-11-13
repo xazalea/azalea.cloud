@@ -1,10 +1,10 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+
 /**
  * Proxy for gstatic.com resources (Cloud Shell scripts, CSS, etc.)
  * This bypasses CORS restrictions
- * @param {import('@vercel/node').VercelRequest} req
- * @param {import('@vercel/node').VercelResponse} res
  */
-module.exports = async function handler(req, res) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers
   const origin = req.headers?.origin;
   if (origin) {

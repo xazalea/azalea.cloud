@@ -5,21 +5,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
  * Routes to Haskell handler if available, otherwise uses TypeScript fallback
  */
 
-// Try to import the handler, fallback to inline implementation
-let handler: ((req: VercelRequest, res: VercelResponse) => Promise<void>) | null = null;
-
-try {
-  // Try to load the Haskell handler
-  handler = require('./handler').default;
-} catch (e) {
-  // Handler not available, will use fallback
-  console.log('[CoolVM] Haskell handler not available, using TypeScript fallback');
-}
-
 export default async function handlerWrapper(req: VercelRequest, res: VercelResponse) {
-  if (handler) {
-    return handler(req, res);
-  }
 
   // Fallback TypeScript implementation
   res.setHeader('Access-Control-Allow-Origin', '*');

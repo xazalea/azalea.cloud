@@ -1,8 +1,6 @@
-/**
- * @param {import('@vercel/node').VercelRequest} req
- * @param {import('@vercel/node').VercelResponse} res
- */
-module.exports = async function handler(req, res) {
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Allow credentials for cookie-based authentication
   // Note: When using credentials, we must specify the origin, not '*'
   const origin = req.headers?.origin;
@@ -27,16 +25,16 @@ module.exports = async function handler(req, res) {
     const targetPath = pathStr ? `/${pathStr}` : '/';
     const targetUrl = new URL(targetPath, 'https://shell.cloud.google.com').toString();
         
-    const proxyHeaders = {
-      'User-Agent': (req.headers?.['user-agent'] || 'AzaleaCloud/1.0'),
-      'Accept': (req.headers?.['accept'] || 'application/json, text/plain, */*'),
-      'Accept-Language': (req.headers?.['accept-language'] || 'en-US,en;q=0.9'),
+    const proxyHeaders: Record<string, string> = {
+      'User-Agent': (req.headers?.['user-agent'] || 'AzaleaCloud/1.0') as string,
+      'Accept': (req.headers?.['accept'] || 'application/json, text/plain, */*') as string,
+      'Accept-Language': (req.headers?.['accept-language'] || 'en-US,en;q=0.9') as string,
     };
     
     // Forward important headers
     if (req.headers?.['content-type']) {
       proxyHeaders['Content-Type'] = String(req.headers['content-type']);
-        }
+    }
     if (req.headers?.['cookie']) {
       proxyHeaders['Cookie'] = String(req.headers['cookie']);
     }
