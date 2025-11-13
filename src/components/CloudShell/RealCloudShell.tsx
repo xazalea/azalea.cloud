@@ -156,33 +156,14 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
           }
         }
       
-      // First, check if this is a call to one of our API endpoints that should use fallback
-      // This catches jserror and other API calls from Cloud Shell scripts
+      // First, check if this is a call to one of our API endpoints
+      // Use originalFetch to avoid infinite recursion (apiFallback uses window.fetch)
       if (urlStr.includes('/api/environment') || 
           urlStr.includes('/api/auth/token') || 
           urlStr.includes('/api/proxy/cloudshell') ||
           urlStr.includes('/clienterror/jserror')) {
-        // Use fetchWithFallback for these endpoints
-        try {
-          const method = init?.method || (typeof input === 'object' && 'method' in input ? (input as Request).method : 'GET');
-          if (method === 'GET') {
-            return await apiFallback.get(urlStr, init);
-          } else if (method === 'POST' || method === 'PUT') {
-            const body = init?.body || (typeof input === 'object' && 'body' in input ? (input as Request).body : undefined);
-            return method === 'POST' 
-              ? await apiFallback.post(urlStr, body, init)
-              : await apiFallback.put(urlStr, body, init);
-          } else {
-            return await fetchWithFallback(urlStr, { ...init, method });
-          }
-        } catch (error) {
-          // Handle API fallback errors
-          if (error instanceof APIFallbackError) {
-            console.error('[Cloud Shell Proxy]', error.getUserMessage());
-          }
-          // If fallback fails, try original fetch
-          return originalFetch(input, init);
-        }
+        // Use originalFetch directly to avoid recursion
+        return originalFetch(input, init);
       }
       
       // Don't proxy OAuth requests - they need to go directly to Google
@@ -252,45 +233,18 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         
         try {
             const method = init?.method || (typeof input === 'object' && 'method' in input ? (input as Request).method : 'GET');
-            let response: Response;
+            const body = init?.body || (typeof input === 'object' && 'body' in input ? (input as Request).body : undefined);
             
-            if (method === 'GET' || method === 'HEAD') {
-              response = await apiFallback.get(proxyUrl, {
-                ...init,
-                headers: {
-                  ...init?.headers,
-                  'X-Original-URL': targetUrl,
-                },
-              });
-            } else {
-              const body = init?.body || (typeof input === 'object' && 'body' in input ? (input as Request).body : undefined);
-              if (method === 'POST') {
-                response = await apiFallback.post(proxyUrl, body, {
-                  ...init,
-                  headers: {
-                    ...init?.headers,
-                    'X-Original-URL': targetUrl,
-                  },
-                });
-              } else if (method === 'PUT') {
-                response = await apiFallback.put(proxyUrl, body, {
-          ...init,
-          headers: {
-            ...init?.headers,
-            'X-Original-URL': targetUrl,
-          },
-        });
-              } else {
-                response = await fetchWithFallback(proxyUrl, {
-                  ...init,
-                  method,
-                  headers: {
-                    ...init?.headers,
-                    'X-Original-URL': targetUrl,
-                  },
-                });
-              }
-            }
+            // Use originalFetch to avoid infinite recursion (apiFallback uses window.fetch)
+            const response = await originalFetch(proxyUrl, {
+              ...init,
+              method,
+              body: method !== 'GET' && method !== 'HEAD' ? body : undefined,
+              headers: {
+                ...init?.headers,
+                'X-Original-URL': targetUrl,
+              },
+            });
           
           // Track 401 errors (expected during OAuth flow)
           if (response.status === 401) {

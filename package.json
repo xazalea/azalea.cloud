@@ -19,7 +19,8 @@
     "deploy": "bash scripts/deploy/deploy.sh",
     "setup:infrastructure": "bash scripts/deploy/setup-infrastructure.sh",
     "build:haskell": "bash scripts/build-haskell.sh",
-    "build:all": "npm run build:webvm && npm run build:haskell && npm run build"
+    "build:all": "npm run build:webvm && npm run build:haskell && npm run build",
+    "test:site": "bash scripts/test-site.sh"
   },
   "dependencies": {
     "@vercel/sandbox": "^1.0.2",

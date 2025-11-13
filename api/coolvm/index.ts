@@ -5,7 +5,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
  * Routes to Haskell handler if available, otherwise uses TypeScript fallback
  */
 
-export default async function handlerWrapper(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Fallback TypeScript implementation
   res.setHeader('Access-Control-Allow-Origin', '*');
