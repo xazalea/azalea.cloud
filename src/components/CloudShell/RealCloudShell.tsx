@@ -125,7 +125,15 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
     
     // Intercept fetch requests to Cloud Shell
     const originalFetch = window.fetch;
+    // Track if we're already in a proxy request to prevent infinite recursion
+    const proxyRequestFlag = Symbol('proxyRequest');
+    
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      // If this is already a proxy request, use originalFetch directly
+      if ((init as any)?.[proxyRequestFlag]) {
+        return originalFetch(input, init);
+      }
+      
       try {
         // Normalize URL
         let urlStr: string;
@@ -148,7 +156,7 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         if (urlStr.includes('localhost:3001')) {
           // Silently handle - WebVM backend is optional
           try {
-            const response = await fetch(urlStr, { ...init, signal: AbortSignal.timeout(1000) });
+            const response = await originalFetch(urlStr, { ...init, signal: AbortSignal.timeout(1000), [proxyRequestFlag]: true } as any);
             return response;
           } catch {
             // Silently fail - fallback will be used
@@ -157,13 +165,17 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
         }
       
       // First, check if this is a call to one of our API endpoints
-      // Use originalFetch to avoid infinite recursion (apiFallback uses window.fetch)
+      // Mark as proxy request to prevent infinite recursion
       if (urlStr.includes('/api/environment') || 
           urlStr.includes('/api/auth/token') || 
           urlStr.includes('/api/proxy/cloudshell') ||
+          urlStr.includes('/api/proxy/gstatic') ||
+          urlStr.includes('/api/backend/') ||
+          urlStr.includes('/api/vm/') ||
+          urlStr.includes('/api/coolvm') ||
           urlStr.includes('/clienterror/jserror')) {
-        // Use originalFetch directly to avoid recursion
-        return originalFetch(input, init);
+        // Use originalFetch directly with flag to prevent recursion
+        return originalFetch(input, { ...init, [proxyRequestFlag]: true } as any);
       }
       
       // Don't proxy OAuth requests - they need to go directly to Google
@@ -235,7 +247,7 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
             const method = init?.method || (typeof input === 'object' && 'method' in input ? (input as Request).method : 'GET');
             const body = init?.body || (typeof input === 'object' && 'body' in input ? (input as Request).body : undefined);
             
-            // Use originalFetch to avoid infinite recursion (apiFallback uses window.fetch)
+            // Use originalFetch with flag to prevent infinite recursion
             const response = await originalFetch(proxyUrl, {
               ...init,
               method,
@@ -244,7 +256,8 @@ export const RealCloudShell: React.FC<RealCloudShellProps> = ({
                 ...init?.headers,
                 'X-Original-URL': targetUrl,
               },
-            });
+              [proxyRequestFlag]: true,
+            } as any);
           
           // Track 401 errors (expected during OAuth flow)
           if (response.status === 401) {

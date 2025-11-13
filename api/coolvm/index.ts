@@ -1,11 +1,10 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
 /**
  * CoolVM API Endpoint
  * Routes to Haskell handler if available, otherwise uses TypeScript fallback
+ * @param {import('@vercel/node').VercelRequest} req
+ * @param {import('@vercel/node').VercelResponse} res
  */
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+module.exports = async function handler(req, res) {
 
   // Fallback TypeScript implementation
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -70,7 +69,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       error: error instanceof Error ? error.message : 'VM execution failed',
     });
   }
-}
+};
 
 async function executeVMProgram(program: any[], input?: any): Promise<any> {
   const stack: any[] = [];

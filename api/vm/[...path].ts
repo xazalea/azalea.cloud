@@ -1,10 +1,10 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
 /**
  * Unified VM API endpoint
  * Handles: /api/vm/provision, /api/vm/status/:vmId, /api/vm/stop/:vmId
+ * @param {import('@vercel/node').VercelRequest} req
+ * @param {import('@vercel/node').VercelResponse} res
  */
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+module.exports = async function handler(req, res) {
   // CORS headers
   const origin = req.headers?.origin;
   if (origin) {
@@ -75,5 +75,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       error: error instanceof Error ? error.message : 'VM operation failed',
     });
   }
-}
+};
 

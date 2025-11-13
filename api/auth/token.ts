@@ -1,6 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
-export default function handler(req: VercelRequest, res: VercelResponse) {
+/**
+ * @param {import('@vercel/node').VercelRequest} req
+ * @param {import('@vercel/node').VercelResponse} res
+ */
+module.exports = function handler(req, res) {
   try {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -21,4 +23,4 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
       res.status(500).json({ error: 'Internal server error' });
     }
   }
-}
+};
